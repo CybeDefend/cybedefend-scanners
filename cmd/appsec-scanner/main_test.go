@@ -37,6 +37,11 @@ func TestMain(m *testing.M) {
 	}
 	adapter.Register(testAdapter{name: "test-sast", sarif: sarifPath})
 	adapter.Register(testAdapter{name: "test-broken", sarif: sarifPath, flags: []string{"--code", "2"}})
+	imageSARIF, err := filepath.Abs("../../testdata/sarif/trivy-image.sarif")
+	if err != nil {
+		panic(err)
+	}
+	adapter.Register(testImageAdapter{name: "test-image", sarif: imageSARIF})
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -300,5 +305,122 @@ func TestVersionPrintsTheBuildVersion(t *testing.T) {
 	}
 	if strings.TrimSpace(string(got)) != "appsec-scanner 1.2.3" {
 		t.Fatalf("version = %q", got)
+	}
+}
+
+// testImageAdapter is an ImageAdapter whose fake tool writes a Trivy image SARIF.
+type testImageAdapter struct {
+	name           string
+	sarif          string
+	image, archive string
+}
+
+func (a testImageAdapter) Name() string             { return a.name }
+func (a testImageAdapter) Type() adapter.ImportType { return adapter.TypeContainer }
+func (a testImageAdapter) Command(src, out string, env map[string]string) ([]string, bool) {
+	return []string{fakeTool, "--sarif", a.sarif, "--out", out}, false
+}
+func (a testImageAdapter) SuccessExitCodes() []int { return []int{0} }
+func (a testImageAdapter) SourceRoot() string      { return "/" }
+func (a testImageAdapter) WithImage(image, archive string) adapter.Adapter {
+	a.image, a.archive = image, archive
+	return a
+}
+
+// withEnv adds keys to an environment.
+func withEnv(base func(string) string, extra map[string]string) func(string) string {
+	return func(k string) string {
+		if v, ok := extra[k]; ok {
+			return v
+		}
+		return base(k)
+	}
+}
+
+func TestRunTrivyImageWithoutImageIsAConfigError(t *testing.T) {
+	srv, rec := importServer(t, 202, `{"scanId":"x"}`)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"run", "trivy-image", "--upload", "--out", filepath.Join(t.TempDir(), "r.sarif")}, uploadEnv(srv.URL+"/api"), &stdout, &stderr)
+	if code != 4 {
+		t.Fatalf("exit %d, want 4: %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "CYBEDEFEND_IMAGE") {
+		t.Errorf("stderr does not name CYBEDEFEND_IMAGE: %q", stderr.String())
+	}
+	if rec.sarif != nil || rec.fields["type"] != "" {
+		t.Error("a request was made")
+	}
+}
+
+func TestRunTrivyImageWithAnInvalidImageIsAConfigError(t *testing.T) {
+	srv, rec := importServer(t, 202, `{"scanId":"x"}`)
+	var stdout, stderr bytes.Buffer
+	env := withEnv(uploadEnv(srv.URL+"/api"), map[string]string{"CYBEDEFEND_IMAGE": "Bad Image"})
+	code := run([]string{"run", "trivy-image", "--upload", "--out", filepath.Join(t.TempDir(), "r.sarif")}, env, &stdout, &stderr)
+	if code != 4 {
+		t.Fatalf("exit %d, want 4: %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "CYBEDEFEND_IMAGE") {
+		t.Errorf("stderr does not name CYBEDEFEND_IMAGE: %q", stderr.String())
+	}
+	if rec.sarif != nil || rec.fields["type"] != "" {
+		t.Error("a request was made")
+	}
+}
+
+func TestRunImageOnAnotherAdapterIsAConfigError(t *testing.T) {
+	srv, rec := importServer(t, 202, `{"scanId":"x"}`)
+	var stdout, stderr bytes.Buffer
+	env := withEnv(uploadEnv(srv.URL+"/api"), map[string]string{"CYBEDEFEND_IMAGE": "x:1"})
+	code := run([]string{"run", "test-sast", "--upload", "--out", filepath.Join(t.TempDir(), "r.sarif")}, env, &stdout, &stderr)
+	if code != 4 {
+		t.Fatalf("exit %d, want 4: %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "CYBEDEFEND_IMAGE is only used by trivy-image") {
+		t.Errorf("stderr = %q", stderr.String())
+	}
+	if rec.sarif != nil {
+		t.Error("a request was made")
+	}
+	// A real adapter of this repository, and --image instead of the variable.
+	stderr.Reset()
+	code = run([]string{"run", "trivy-fs", "--image", "x:1", "--out", filepath.Join(t.TempDir(), "r.sarif")}, uploadEnv(srv.URL+"/api"), &stdout, &stderr)
+	if code != 4 || !strings.Contains(stderr.String(), "CYBEDEFEND_IMAGE is only used by trivy-image") {
+		t.Errorf("trivy-fs with --image: exit %d, stderr %q", code, stderr.String())
+	}
+}
+
+func TestRunUploadsTheImagePart(t *testing.T) {
+	srv, rec := importServer(t, 202, `{"scanId":"6f1c2a9e-0000-4000-8000-000000000002"}`)
+	out := filepath.Join(t.TempDir(), "results.sarif")
+	var stdout, stderr bytes.Buffer
+	env := withEnv(uploadEnv(srv.URL+"/api"), map[string]string{"CYBEDEFEND_IMAGE": "ghcr.io/acme/api:1.4.2"})
+	code := run([]string{"run", "test-image", "--upload", "--out", out}, env, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit %d\nstdout: %s\nstderr: %s", code, stdout.String(), stderr.String())
+	}
+	if rec.fields["type"] != "container" {
+		t.Errorf("type = %q, want container", rec.fields["type"])
+	}
+	if rec.fields["image"] != "ghcr.io/acme/api:1.4.2" {
+		t.Errorf("image = %q, want the configured reference", rec.fields["image"])
+	}
+	uris := uploadedURIs(t, rec.sarif)
+	if len(uris) != 2 || uris[0] != "app/package-lock.json" {
+		t.Fatalf("URIs = %q, want both results, app/package-lock.json first", uris)
+	}
+	if !strings.Contains(stderr.String(), "0 dropped") {
+		t.Errorf("stderr lacks 0 dropped: %s", stderr.String())
+	}
+	var l struct {
+		Runs []struct {
+			Properties map[string]any `json:"properties"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(rec.sarif, &l); err != nil {
+		t.Fatal(err)
+	}
+	if len(l.Runs) != 1 || l.Runs[0].Properties["imageName"] != "alpine:3.18.0" || l.Runs[0].Properties["imageID"] == nil {
+		t.Errorf("run properties not kept: %+v", l.Runs)
 	}
 }

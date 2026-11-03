@@ -1,0 +1,69 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Trivy",
+          "fullName": "Trivy Vulnerability Scanner",
+          "informationUri": "https://github.com/aquasecurity/trivy",
+          "version": "0.76.1",
+          "rules": [
+            {
+              "id": "CVE-2021-23337",
+              "name": "LanguageSpecificPackageVulnerability",
+              "shortDescription": { "text": "lodash: command injection via template" },
+              "properties": { "precision": "very-high", "security-severity": "7.2", "tags": ["vulnerability", "security", "HIGH"] }
+            },
+            {
+              "id": "CVE-2023-0464",
+              "name": "OsPackageVulnerability",
+              "shortDescription": { "text": "openssl: denial of service by excessive resource usage in verifying X509 policy constraints" },
+              "properties": { "precision": "very-high", "security-severity": "7.5", "tags": ["vulnerability", "security", "HIGH"] }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CVE-2021-23337",
+          "ruleIndex": 0,
+          "level": "error",
+          "message": { "text": "Package: lodash\nInstalled Version: 4.17.20\nVulnerability CVE-2021-23337\nSeverity: HIGH\nFixed Version: 4.17.21\nLink: [CVE-2021-23337](https://avd.aquasec.com/nvd/cve-2021-23337)" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "app/node_modules/lodash/package.json", "uriBaseId": "ROOTPATH" },
+                "region": { "startLine": 1, "startColumn": 1, "endLine": 1, "endColumn": 1 }
+              },
+              "message": { "text": "app/node_modules/lodash/package.json: lodash@4.17.20" }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2023-0464",
+          "ruleIndex": 1,
+          "level": "error",
+          "message": { "text": "Package: libcrypto3\nInstalled Version: 3.1.0-r4\nVulnerability CVE-2023-0464\nSeverity: HIGH\nFixed Version: 3.1.0-r5\nLink: [CVE-2023-0464](https://avd.aquasec.com/nvd/cve-2023-0464)" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "/out/image.tar", "uriBaseId": "ROOTPATH" },
+                "region": { "startLine": 1, "startColumn": 1, "endLine": 1, "endColumn": 1 }
+              },
+              "message": { "text": "/out/image.tar: libcrypto3@3.1.0-r4" }
+            }
+          ]
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "imageName": "/out/image.tar",
+        "repoTags": ["appsec-scanners-sample:test"],
+        "repoDigests": [],
+        "imageID": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ]
+}

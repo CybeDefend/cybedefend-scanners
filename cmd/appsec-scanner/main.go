@@ -3,6 +3,7 @@
 // instance.
 //
 //	appsec-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout D]
+//	                   [--image REF] [--image-archive FILE]   (trivy-image only)
 //	appsec-scanner version
 //
 // Exit codes: 0 done; 2 the tool failed; 3 the SARIF was refused locally or by
@@ -39,7 +40,7 @@ const (
 	exitTool     = 2
 	exitRefused  = 3
 	exitConfig   = 4
-	usageMessage = "usage: appsec-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout DURATION]\n       appsec-scanner version\n"
+	usageMessage = "usage: appsec-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout DURATION] [--image REF] [--image-archive FILE]\n       appsec-scanner version\n"
 )
 
 // scanIDPattern is what a scan id printed to the terminal may look like.
@@ -84,6 +85,23 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 		logf("unknown adapter %q; known adapters: %s", cfg.Adapter, strings.Join(adapter.Names(), ", "))
 		return exitConfig
 	}
+	sourceRoot := cfg.Source
+	if ia, isImage := a.(adapter.ImageAdapter); isImage {
+		// The reference is never printed: it is checked, then sent as typed.
+		if cfg.Image == "" {
+			logf("%s needs the image reference: set CYBEDEFEND_IMAGE or --image", a.Name())
+			return exitConfig
+		}
+		if !adapter.ValidImage(cfg.Image) {
+			logf("CYBEDEFEND_IMAGE is not a valid image reference: registry/name[:tag][@sha256:digest], 255 characters at most")
+			return exitConfig
+		}
+		a = ia.WithImage(cfg.Image, cfg.ImageArchive)
+		sourceRoot = ia.SourceRoot()
+	} else if cfg.Image != "" {
+		logf("CYBEDEFEND_IMAGE is only used by trivy-image")
+		return exitConfig
+	}
 
 	res, err := runner.Run(ctx, a, cfg.Source, cfg.Out, cfg.Timeout, toolEnv(a, getenv))
 	if err != nil {
@@ -108,7 +126,7 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 		logf("the SARIF of %s was refused: %s", a.Name(), sarifReason(err))
 		return exitRefused
 	}
-	rep := sarif.Normalize(log, sarif.NormalizeOptions{SourceRoot: cfg.Source, DropSnippets: a.Type() == adapter.TypeSecret})
+	rep := sarif.Normalize(log, sarif.NormalizeOptions{SourceRoot: sourceRoot, DropSnippets: a.Type() == adapter.TypeSecret})
 	logf("normalised: %d results, %d rewritten, %d dropped", countResults(log), rep.Rewritten, rep.Dropped)
 
 	var buf bytes.Buffer
@@ -128,7 +146,7 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 	client := &upload.Client{BaseURL: cfg.APIURL, Token: cfg.Token, UserAgent: "appsec-scanner/" + version}
 	logf("uploading %d bytes", buf.Len())
 	resp, err := client.Import(ctx, upload.Request{
-		ProjectID: cfg.ProjectID, Type: string(a.Type()), Branch: cfg.Branch, SARIF: buf.Bytes(),
+		ProjectID: cfg.ProjectID, Type: string(a.Type()), Branch: cfg.Branch, Image: cfg.Image, SARIF: buf.Bytes(),
 	})
 	if err != nil {
 		var apiErr *upload.APIError

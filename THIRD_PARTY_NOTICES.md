@@ -34,7 +34,7 @@ source code, and the licence text, are at https://github.com/opengrep/opengrep
 
 ## Trivy
 
-- **Images:** `appsec-scanners-trivy-config`, `appsec-scanners-trivy-fs`.
+- **Images:** `appsec-scanners-trivy-config`, `appsec-scanners-trivy-fs`, `appsec-scanners-trivy-image`.
 - **Project:** https://github.com/aquasecurity/trivy
 - **Version:** v0.76.1, from `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c`
   (multi-arch index; the binary `/usr/local/bin/trivy` is copied into the image).
@@ -48,8 +48,13 @@ source code, and the licence text, are at https://github.com/opengrep/opengrep
   Trivy exits 0 whatever it finds (`--exit-code 0`) and writes `security-severity` on its rules.
 - **Invocation (`trivy-fs`, import type `sca`):**
   `trivy fs --scanners vuln --format sarif --output <file> --exit-code 0 --cache-dir /tmp/appsec-scanner/trivy-cache --skip-version-check --disable-telemetry --quiet <src>`.
-- **Data downloaded at run time (`trivy-fs`):** the image bakes no vulnerability
-  database. At each run Trivy downloads its vulnerability database from
+- **Invocation (`trivy-image`, import type `container`):**
+  `trivy image --scanners vuln --format sarif --output <file> --exit-code 0 --cache-dir /tmp/appsec-scanner/trivy-cache --skip-version-check --disable-telemetry --quiet <image>`,
+  or `… --quiet --input <archive>` for a `docker save` archive. Trivy pulls the scanned
+  image itself from its registry (`TRIVY_USERNAME`, `TRIVY_PASSWORD` or
+  `TRIVY_REGISTRY_TOKEN` for a private one), or reads the archive; no Docker socket is used.
+- **Data downloaded at run time (`trivy-fs`, `trivy-image`):** neither image bakes a
+  vulnerability database. At each run Trivy downloads its vulnerability database from
   `mirror.gcr.io/aquasec/trivy-db`, then `ghcr.io/aquasecurity/trivy-db` (and,
   for Java projects, the Java index from `mirror.gcr.io/aquasec/trivy-java-db`,
   then `ghcr.io/aquasecurity/trivy-java-db`) into

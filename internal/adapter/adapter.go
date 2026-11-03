@@ -4,6 +4,7 @@ package adapter
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -45,9 +46,36 @@ type Adapter interface {
 	SuccessExitCodes() []int
 }
 
+// ImageAdapter is an adapter that scans a container image rather than the
+// source directory (trivy-image). The command binds it to the image the user
+// named before running it.
+type ImageAdapter interface {
+	Adapter
+	// WithImage returns the adapter bound to one image; archive is the path
+	// of a `docker save` tar inside the container, or "".
+	WithImage(image, archive string) Adapter
+	// SourceRoot is the root Normalize uses for this adapter's URIs: "/",
+	// the image root, never the mounted source.
+	SourceRoot() string
+}
+
+// maxImageLength is the contract's cap on the image part.
+const maxImageLength = 255
+
+// ImagePattern is the image reference the import route accepts
+// (the import contract, verbatim): registry/name[:tag][@sha256:digest].
+var ImagePattern = regexp.MustCompile(`^(?:[a-z0-9.-]+(?::[0-9]{1,5})?/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[A-Za-z0-9_][A-Za-z0-9._-]{0,127})?(?:@sha256:[a-f0-9]{64})?$`)
+
+// ValidImage reports whether ref may be sent as the image part: it matches
+// ImagePattern and holds 255 characters at most.
+func ValidImage(ref string) bool {
+	return ref != "" && len(ref) <= maxImageLength && ImagePattern.MatchString(ref)
+}
+
 // EnvForwarder is implemented by an adapter whose tool needs environment
 // variables besides PATH, HOME and TMPDIR (OPENGREP_CONFIG for opengrep,
-// GH_TOKEN for zizmor, the database mirrors for trivy-fs): the keys are copied
+// GH_TOKEN for zizmor, the database mirrors for trivy-fs, the database mirrors
+// and registry credentials for trivy-image): the keys are copied
 // from the runner's environment to the tool's when set. A CYBEDEFEND_* key is
 // never copied, even when listed.
 type EnvForwarder interface {

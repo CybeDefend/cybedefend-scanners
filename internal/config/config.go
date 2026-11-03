@@ -26,6 +26,11 @@ type Config struct {
 	Adapter, Source, Out, APIURL, Token, ProjectID, Branch string
 	Upload                                                 bool
 	Timeout                                                time.Duration
+	// Image is the image reference trivy-image scans and uploads as the
+	// image part (--image, else CYBEDEFEND_IMAGE). ImageArchive is a
+	// `docker save` tar Trivy reads instead of pulling it (--image-archive,
+	// else IMAGE_ARCHIVE).
+	Image, ImageArchive string
 }
 
 // branchVariables are read in order; the first non-empty one wins.
@@ -42,6 +47,8 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 	fs.StringVar(&c.Out, "out", DefaultOut, "where the normalised SARIF is written")
 	fs.BoolVar(&c.Upload, "upload", false, "upload the SARIF to the import API")
 	fs.DurationVar(&c.Timeout, "timeout", DefaultTimeout, "how long the tool may run")
+	fs.StringVar(&c.Image, "image", "", "image reference (trivy-image only)")
+	fs.StringVar(&c.ImageArchive, "image-archive", "", "docker save archive of the image (trivy-image only)")
 
 	var positional []string
 	rest := args
@@ -74,6 +81,13 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 		return Config{}, fmt.Errorf("--source: %w", err)
 	}
 	c.Source = src
+
+	if c.Image == "" {
+		c.Image = strings.TrimSpace(getenv("CYBEDEFEND_IMAGE"))
+	}
+	if c.ImageArchive == "" {
+		c.ImageArchive = strings.TrimSpace(getenv("IMAGE_ARCHIVE"))
+	}
 
 	c.APIURL = strings.TrimSpace(getenv("CYBEDEFEND_API_URL"))
 	c.ProjectID = strings.TrimSpace(getenv("CYBEDEFEND_PROJECT_ID"))

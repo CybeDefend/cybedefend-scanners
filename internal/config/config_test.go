@@ -186,3 +186,41 @@ func TestAPIURLMustBeHTTPWithoutCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestImageFromFlagOrEnv(t *testing.T) {
+	env := envOf(map[string]string{"CYBEDEFEND_IMAGE": "y:2", "IMAGE_ARCHIVE": "/out/i.tar"})
+	c, err := Load([]string{"trivy-image", "--image", "x:1"}, env)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.Image != "x:1" {
+		t.Errorf("Image = %q, want the --image value x:1", c.Image)
+	}
+	if c.ImageArchive != "/out/i.tar" {
+		t.Errorf("ImageArchive = %q, want /out/i.tar", c.ImageArchive)
+	}
+
+	c, err = Load([]string{"trivy-image"}, env)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.Image != "y:2" {
+		t.Errorf("Image = %q, want CYBEDEFEND_IMAGE y:2", c.Image)
+	}
+
+	c, err = Load([]string{"trivy-image", "--image-archive", "/out/j.tar"}, env)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.ImageArchive != "/out/j.tar" {
+		t.Errorf("ImageArchive = %q, want the --image-archive value", c.ImageArchive)
+	}
+
+	c, err = Load([]string{"trivy-image"}, envOf(nil))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.Image != "" || c.ImageArchive != "" {
+		t.Errorf("Image = %q, ImageArchive = %q, want both empty", c.Image, c.ImageArchive)
+	}
+}
