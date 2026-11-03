@@ -43,7 +43,9 @@ func TestOpengrepImageOnPythonSample(t *testing.T) {
 
 	var found bool
 	for _, r := range sarifResults(t, u.SARIF) {
-		if !strings.Contains(r.RuleID, "python-eval") {
+		// The plain id of the rule file, whatever directory the rules are
+		// mounted in (Opengrep prefixes it with that directory's path).
+		if r.RuleID != "python-eval" {
 			continue
 		}
 		for _, l := range r.Locations {

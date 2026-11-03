@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/cybedefend/cybedefend-scanners/internal/sarif"
 )
 
 // ImportType is the `type` part of the import route.
@@ -80,6 +82,15 @@ func ValidImage(ref string) bool {
 // never copied, even when listed.
 type EnvForwarder interface {
 	ForwardedEnv() []string
+}
+
+// SARIFRewriter is implemented by an adapter whose tool writes something the
+// platform must not read as is: the command calls RewriteSARIF after the SARIF
+// was parsed and checked, before it is normalised and uploaded. src is the
+// directory the tool ran in and scanned, env the tool's environment. It
+// returns the number of values rewritten.
+type SARIFRewriter interface {
+	RewriteSARIF(l *sarif.Log, src string, env map[string]string) int
 }
 
 // forbiddenEnvPrefix marks this program's own variables, the token among them.

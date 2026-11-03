@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cybedefend/cybedefend-scanners/internal/adapter"
+	"github.com/cybedefend/cybedefend-scanners/internal/sarif"
 )
 
 const testToken = "cdp_test_secret_value_0123456789"
@@ -422,5 +423,56 @@ func TestRunUploadsTheImagePart(t *testing.T) {
 	}
 	if len(l.Runs) != 1 || l.Runs[0].Properties["imageName"] != "alpine:3.18.0" || l.Runs[0].Properties["imageID"] == nil {
 		t.Errorf("run properties not kept: %+v", l.Runs)
+	}
+}
+
+// rewritingAdapter is testAdapter with a SARIFRewriter that renames rule A.
+type rewritingAdapter struct {
+	testAdapter
+	src *string
+}
+
+func (a rewritingAdapter) RewriteSARIF(l *sarif.Log, src string, env map[string]string) int {
+	*a.src = src
+	return sarif.RenameRuleIDs(l, func(*sarif.Run) func(string) (string, bool) {
+		return func(id string) (string, bool) { return "plain-" + id, id == "A" }
+	})
+}
+
+func TestRunAppliesTheAdaptersSARIFRewriterBeforeUpload(t *testing.T) {
+	var gotSrc string
+	sarifPath, err := filepath.Abs("../../testdata/sarif/absolute-uri.sarif")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter.Register(rewritingAdapter{testAdapter: testAdapter{name: "test-rewriter", sarif: sarifPath}, src: &gotSrc})
+	srv, rec := importServer(t, 202, `{"scanId":"s1"}`)
+	out := filepath.Join(t.TempDir(), "results.sarif")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"run", "test-rewriter", "--source", "/src", "--out", out, "--upload"}, uploadEnv(srv.URL+"/api"), &stdout, &stderr); code != 0 {
+		t.Fatalf("exit %d\nstderr: %s", code, stderr.String())
+	}
+	if gotSrc != "/src" {
+		t.Errorf("RewriteSARIF got src %q, want /src", gotSrc)
+	}
+	var log struct {
+		Runs []struct {
+			Results []struct {
+				RuleID string `json:"ruleId"`
+			} `json:"results"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(rec.sarif, &log); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range log.Runs[0].Results {
+		got = append(got, r.RuleID)
+	}
+	if strings.Join(got, ",") != "plain-A,B,C,D" {
+		t.Errorf("uploaded ruleIds = %q, want plain-A,B,C,D", got)
+	}
+	if !strings.Contains(stderr.String(), "rewrote 1 rule ids") {
+		t.Errorf("stderr lacks the rewrite count: %s", stderr.String())
 	}
 }

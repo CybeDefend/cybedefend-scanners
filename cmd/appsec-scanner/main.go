@@ -103,7 +103,8 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 		return exitConfig
 	}
 
-	res, err := runner.Run(ctx, a, cfg.Source, cfg.Out, cfg.Timeout, toolEnv(a, getenv))
+	env := toolEnv(a, getenv)
+	res, err := runner.Run(ctx, a, cfg.Source, cfg.Out, cfg.Timeout, env)
 	if err != nil {
 		logf("%v", err)
 		if res != nil && len(res.Output) > 0 {
@@ -125,6 +126,9 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 	if err := sarif.Check(log); err != nil {
 		logf("the SARIF of %s was refused: %s", a.Name(), sarifReason(err))
 		return exitRefused
+	}
+	if rw, ok := a.(adapter.SARIFRewriter); ok {
+		logf("rewrote %d rule ids", rw.RewriteSARIF(log, cfg.Source, env))
 	}
 	rep := sarif.Normalize(log, sarif.NormalizeOptions{SourceRoot: sourceRoot, DropSnippets: a.Type() == adapter.TypeSecret})
 	logf("normalised: %d results, %d rewritten, %d dropped", countResults(log), rep.Rewritten, rep.Dropped)

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -70,7 +69,9 @@ func TestOpengrepResultCarriesSecuritySeverity(t *testing.T) {
 	if err := json.Unmarshal(uploads[0].SARIF, &log); err != nil {
 		t.Fatalf("the uploaded SARIF is not JSON: %v", err)
 	}
-	isEval := func(id string) bool { return id == "python-eval" || strings.HasSuffix(id, ".python-eval") }
+	// The plain id of the rule file: the adapter removes the prefix Opengrep
+	// adds (the dotted path of the rules directory).
+	isEval := func(id string) bool { return id == "python-eval" }
 
 	var seen bool
 	for _, run := range log.Runs {
@@ -87,6 +88,9 @@ func TestOpengrepResultCarriesSecuritySeverity(t *testing.T) {
 				continue
 			}
 			seen = true
+			if _, ok := ruleLevel["python-eval"]; !ok {
+				t.Errorf("tool.driver.rules has no rule with the plain id python-eval")
+			}
 			sev, onResult := res.Properties["security-severity"]
 			if !onResult {
 				sev = ruleSeverity[res.RuleID]
