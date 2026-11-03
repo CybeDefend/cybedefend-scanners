@@ -72,8 +72,8 @@ func TestOpengrepIsRegisteredAsSAST(t *testing.T) {
 	if a.Type() != TypeSAST {
 		t.Fatalf("type = %s, want sast", a.Type())
 	}
-	p, ok := a.(EnvPassthrough)
-	if !ok || !reflect.DeepEqual(p.EnvKeys(), []string{"OPENGREP_CONFIG"}) {
+	p, ok := a.(EnvForwarder)
+	if !ok || !reflect.DeepEqual(p.ForwardedEnv(), []string{"OPENGREP_CONFIG"}) {
 		t.Fatal("opengrep does not receive OPENGREP_CONFIG")
 	}
 }

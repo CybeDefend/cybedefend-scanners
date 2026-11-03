@@ -45,18 +45,11 @@ type Adapter interface {
 	SuccessExitCodes() []int
 }
 
-// EnvPassthrough is implemented by an adapter whose tool needs environment
-// variables besides PATH, HOME and TMPDIR (GH_TOKEN for zizmor, the registry
-// credentials for trivy-image). CYBEDEFEND_* keys are never passed, even when
-// listed.
-type EnvPassthrough interface {
-	EnvKeys() []string
-}
-
 // EnvForwarder is implemented by an adapter whose tool needs environment
-// variables besides PATH, HOME and TMPDIR: the keys are copied from the
-// runner's environment to the tool's when set. A CYBEDEFEND_* key is never
-// copied, even when listed.
+// variables besides PATH, HOME and TMPDIR (OPENGREP_CONFIG for opengrep,
+// GH_TOKEN for zizmor, the database mirrors for trivy-fs): the keys are copied
+// from the runner's environment to the tool's when set. A CYBEDEFEND_* key is
+// never copied, even when listed.
 type EnvForwarder interface {
 	ForwardedEnv() []string
 }
@@ -64,15 +57,12 @@ type EnvForwarder interface {
 // forbiddenEnvPrefix marks this program's own variables, the token among them.
 const forbiddenEnvPrefix = "CYBEDEFEND_"
 
-// ToolEnvKeys returns the keys an adapter declares through EnvForwarder or
-// EnvPassthrough, in order, without duplicates, empty keys or CYBEDEFEND_* keys.
+// ToolEnvKeys returns the keys an adapter declares through EnvForwarder, in
+// order, without duplicates, empty keys or CYBEDEFEND_* keys.
 func ToolEnvKeys(a Adapter) []string {
 	var declared []string
 	if f, ok := a.(EnvForwarder); ok {
-		declared = append(declared, f.ForwardedEnv()...)
-	}
-	if p, ok := a.(EnvPassthrough); ok {
-		declared = append(declared, p.EnvKeys()...)
+		declared = f.ForwardedEnv()
 	}
 	keys := make([]string, 0, len(declared))
 	seen := make(map[string]bool, len(declared))

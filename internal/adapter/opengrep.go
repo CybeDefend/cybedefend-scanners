@@ -23,8 +23,9 @@ func (Opengrep) Name() string { return "opengrep" }
 // Type implements Adapter.
 func (Opengrep) Type() ImportType { return TypeSAST }
 
-// EnvKeys passes OPENGREP_CONFIG, so that Command can read it.
-func (Opengrep) EnvKeys() []string { return []string{OpengrepConfigEnv} }
+// ForwardedEnv implements EnvForwarder: OPENGREP_CONFIG, so that Command can
+// read it.
+func (Opengrep) ForwardedEnv() []string { return []string{OpengrepConfigEnv} }
 
 // SuccessExitCodes implements Adapter: Opengrep exits 0 with findings unless
 // --error is given, which this adapter never does.

@@ -65,7 +65,7 @@ func (f *fakeAdapter) SuccessExitCodes() []int {
 	}
 	return f.codes
 }
-func (f *fakeAdapter) EnvKeys() []string { return f.envKeys }
+func (f *fakeAdapter) ForwardedEnv() []string { return f.envKeys }
 
 func outPath(t *testing.T) string { return filepath.Join(t.TempDir(), "sub", "results.sarif") }
 

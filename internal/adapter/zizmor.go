@@ -32,5 +32,5 @@ func (Zizmor) Command(src, _ string, env map[string]string) ([]string, bool) {
 // and other codes for a tool failure.
 func (Zizmor) SuccessExitCodes() []int { return []int{0} }
 
-// EnvKeys implements EnvPassthrough.
-func (Zizmor) EnvKeys() []string { return []string{zizmorTokenKey} }
+// ForwardedEnv implements EnvForwarder.
+func (Zizmor) ForwardedEnv() []string { return []string{zizmorTokenKey} }

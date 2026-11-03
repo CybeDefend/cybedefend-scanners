@@ -68,7 +68,7 @@ func TestTrivyConfigTypeAndRegistration(t *testing.T) {
 
 // trivy config needs no variable besides PATH, HOME and TMPDIR.
 func TestTrivyConfigForwardsNoExtraEnvironment(t *testing.T) {
-	if _, ok := any(TrivyConfig{}).(EnvPassthrough); ok {
+	if _, ok := any(TrivyConfig{}).(EnvForwarder); ok {
 		t.Fatal("TrivyConfig declares environment keys; it needs none")
 	}
 }

@@ -88,9 +88,17 @@ func TestTrivyCacheDirIsOutsideTheSource(t *testing.T) {
 	}
 }
 
-type passthroughOnly struct{ stub }
+// legacyKeysOnly has the EnvKeys method of the former second interface:
+// EnvForwarder is the only way an adapter declares its tool's keys.
+type legacyKeysOnly struct{ stub }
 
-func (passthroughOnly) EnvKeys() []string { return []string{"GH_TOKEN"} }
+func (legacyKeysOnly) EnvKeys() []string { return []string{"GH_TOKEN"} }
+
+type duplicatedKeys struct{ stub }
+
+func (duplicatedKeys) ForwardedEnv() []string {
+	return []string{"GH_TOKEN", "", "GH_TOKEN", "cybedefend_pat"}
+}
 
 type forwarderOnly struct{ stub }
 
@@ -98,12 +106,15 @@ func (forwarderOnly) ForwardedEnv() []string {
 	return []string{"TRIVY_DB_REPOSITORY", "CYBEDEFEND_TOKEN"}
 }
 
-func TestToolEnvKeysReadsBothInterfacesAndNeverCYBEDEFEND(t *testing.T) {
+func TestToolEnvKeysReadsEnvForwarderOnlyAndNeverCYBEDEFEND(t *testing.T) {
 	if got := ToolEnvKeys(stub{"plain", TypeSAST}); len(got) != 0 {
 		t.Errorf("plain adapter: %q", got)
 	}
-	if got := ToolEnvKeys(passthroughOnly{}); !reflect.DeepEqual(got, []string{"GH_TOKEN"}) {
-		t.Errorf("EnvPassthrough: %q", got)
+	if got := ToolEnvKeys(legacyKeysOnly{}); len(got) != 0 {
+		t.Errorf("an EnvKeys method alone forwarded %q", got)
+	}
+	if got := ToolEnvKeys(duplicatedKeys{}); !reflect.DeepEqual(got, []string{"GH_TOKEN"}) {
+		t.Errorf("duplicates, empty and CYBEDEFEND_* keys: %q", got)
 	}
 	if got := ToolEnvKeys(forwarderOnly{}); !reflect.DeepEqual(got, []string{"TRIVY_DB_REPOSITORY"}) {
 		t.Errorf("EnvForwarder: %q", got)

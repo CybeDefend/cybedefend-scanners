@@ -53,15 +53,15 @@ func TestZizmorCommandOnline(t *testing.T) {
 			t.Fatal("the token is on the command line")
 		}
 	}
-	if !slices.Contains(Zizmor{}.EnvKeys(), "GH_TOKEN") {
-		t.Fatalf("EnvKeys() = %q, does not forward GH_TOKEN", Zizmor{}.EnvKeys())
+	if !slices.Contains(Zizmor{}.ForwardedEnv(), "GH_TOKEN") {
+		t.Fatalf("ForwardedEnv() = %q, does not forward GH_TOKEN", Zizmor{}.ForwardedEnv())
 	}
 }
 
 func TestZizmorForwardsOnlyGHToken(t *testing.T) {
-	var p EnvPassthrough = Zizmor{}
-	if got := p.EnvKeys(); !reflect.DeepEqual(got, []string{"GH_TOKEN"}) {
-		t.Fatalf("EnvKeys() = %q, want [GH_TOKEN]", got)
+	var p EnvForwarder = Zizmor{}
+	if got := p.ForwardedEnv(); !reflect.DeepEqual(got, []string{"GH_TOKEN"}) {
+		t.Fatalf("ForwardedEnv() = %q, want [GH_TOKEN]", got)
 	}
 }
 
