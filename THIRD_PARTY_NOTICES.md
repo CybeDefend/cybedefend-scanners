@@ -11,6 +11,7 @@ around it is Apache-2.0.
 | `appsec-scanners-trivy-config` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied) |
 | `appsec-scanners-zizmor` | zizmor | 1.31.1 | MIT | https://github.com/zizmorcore/zizmor | image `ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9` (used as the final base) |
 | `appsec-scanners-trivy-fs` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied); vulnerability database downloaded at run time |
+| `appsec-scanners-trivy-image` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied); vulnerability database downloaded at run time |
 
 ## Opengrep
 
@@ -53,16 +54,25 @@ source code, and the licence text, are at https://github.com/opengrep/opengrep
   or `… --quiet --input <archive>` for a `docker save` archive. Trivy pulls the scanned
   image itself from its registry (`TRIVY_USERNAME`, `TRIVY_PASSWORD` or
   `TRIVY_REGISTRY_TOKEN` for a private one), or reads the archive; no Docker socket is used.
-- **Data downloaded at run time (`trivy-fs`, `trivy-image`):** neither image bakes a
-  vulnerability database. At each run Trivy downloads its vulnerability database from
-  `mirror.gcr.io/aquasec/trivy-db`, then `ghcr.io/aquasecurity/trivy-db` (and,
-  for Java projects, the Java index from `mirror.gcr.io/aquasec/trivy-java-db`,
-  then `ghcr.io/aquasecurity/trivy-java-db`) into
-  `/tmp/appsec-scanner/trivy-cache`.
-  `TRIVY_DB_REPOSITORY` and `TRIVY_JAVA_DB_REPOSITORY` name a mirror instead.
-  The database is published by Aqua Security and compiled from public
-  advisory sources, each under its own terms; see
-  <https://github.com/aquasecurity/trivy-db>.
+
+### Vulnerability database (trivy-db)
+
+- Used by: `appsec-scanners-trivy-fs` (adapter `trivy-fs`, import type `sca`)
+  and `appsec-scanners-trivy-image` (adapter `trivy-image`, import type
+  `container`). `trivy-config` downloads nothing.
+- Neither image bakes a database: at each run Trivy downloads its
+  vulnerability database from `mirror.gcr.io/aquasec/trivy-db`, then
+  `ghcr.io/aquasecurity/trivy-db` (and, for Java projects, the Java index from
+  `mirror.gcr.io/aquasec/trivy-java-db`, then `ghcr.io/aquasecurity/trivy-java-db`)
+  into `/tmp/appsec-scanner/trivy-cache`. `TRIVY_DB_REPOSITORY` and
+  `TRIVY_JAVA_DB_REPOSITORY` name a mirror instead.
+- Source: <https://github.com/aquasecurity/trivy-db> (and
+  <https://github.com/aquasecurity/trivy-java-db>), published by Aqua Security.
+- Licence: the code that builds the database is Apache-2.0; the data is
+  compiled from public advisory sources (distribution security trackers, GitHub
+  Advisory Database, NVD and others), each under its own terms, listed by the
+  trivy-db project. The database is not redistributed by this repository: the
+  user's own run downloads it.
 
 ## zizmor (image `appsec-scanners-zizmor`)
 

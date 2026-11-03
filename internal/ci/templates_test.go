@@ -464,7 +464,8 @@ func TestReleaseWorkflow(t *testing.T) {
 		t.Fatalf("release.yml: %v", err)
 	}
 
-	// Trigger: push of a v* tag, nothing else.
+	// Trigger: push of a vX.Y.Z tag, nothing else. A moving major tag (v1,
+	// moved by hand for the Action's users) must not start a release.
 	if len(wf.On) != 1 {
 		t.Errorf("release.yml triggers on %d events, want push only", len(wf.On))
 	}
@@ -476,8 +477,8 @@ func TestReleaseWorkflow(t *testing.T) {
 	if err := push.Decode(&pushFilter); err != nil {
 		t.Fatalf("on.push: %v", err)
 	}
-	if len(pushFilter) != 1 || strings.Join(pushFilter["tags"], ",") != "v*" {
-		t.Errorf("on.push = %v, want tags: ['v*'] only", pushFilter)
+	if len(pushFilter) != 1 || strings.Join(pushFilter["tags"], ",") != "v[0-9]+.[0-9]+.[0-9]+" {
+		t.Errorf("on.push = %v, want tags: ['v[0-9]+.[0-9]+.[0-9]+'] only", pushFilter)
 	}
 
 	// Permissions: nothing at the workflow level; each job asks for its own,
