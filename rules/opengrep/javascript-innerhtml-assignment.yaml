@@ -1,0 +1,23 @@
+# Copyright CybeDefend. Licensed under the Apache License, Version 2.0.
+rules:
+  - id: javascript-innerhtml-assignment
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      A value that is not a constant string is assigned to innerHTML, so the
+      browser parses it as HTML. Markup or script in that value then runs in
+      the page (cross-site scripting). Set textContent for text, or build the
+      elements with the DOM API; sanitise first when HTML is really needed.
+    patterns:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $VALUE
+          - pattern: $EL.innerHTML += $VALUE
+      - pattern-not: $EL.innerHTML = "..."
+      - pattern-not: $EL.innerHTML += "..."
+    metadata:
+      cwe:
+        - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      category: security
+      confidence: MEDIUM
+      security-severity: "6.1"
+      license: Apache-2.0

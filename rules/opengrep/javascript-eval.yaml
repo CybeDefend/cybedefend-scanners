@@ -1,0 +1,20 @@
+# Copyright CybeDefend. Licensed under the Apache License, Version 2.0.
+rules:
+  - id: javascript-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      eval() runs its argument as JavaScript. A value that is not a constant
+      string lets whoever controls it run arbitrary code with this page's or
+      this process's rights. Parse data with JSON.parse, or dispatch on an
+      explicit list of allowed operations.
+    patterns:
+      - pattern: eval($CODE)
+      - pattern-not: eval("...")
+    metadata:
+      cwe:
+        - "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"
+      category: security
+      confidence: MEDIUM
+      security-severity: "9.8"
+      license: Apache-2.0

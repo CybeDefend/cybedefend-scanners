@@ -9,26 +9,8 @@ import (
 	"testing"
 )
 
-// rulesPresent reports whether rules/opengrep holds at least one rule.
-func rulesPresent(t *testing.T) bool {
-	t.Helper()
-	for _, ext := range []string{"*.yaml", "*.yml"} {
-		m, err := filepath.Glob(filepath.Join(repoRoot(t), "rules", "opengrep", ext))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(m) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func TestOpengrepImageOnPythonSample(t *testing.T) {
 	requireDocker(t)
-	if !rulesPresent(t) {
-		t.Skip("no bundled rules yet")
-	}
 	api := startFakeAPI(t)
 	code, out := runImage(t, "opengrep", filepath.Join(repoRoot(t), "testdata", "samples", "sast-python"), api.URL)
 	if code != 0 {

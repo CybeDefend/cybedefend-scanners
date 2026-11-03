@@ -1,0 +1,29 @@
+# Copyright CybeDefend. Licensed under the Apache License, Version 2.0.
+rules:
+  - id: go-exec-command-shell
+    languages: [go]
+    severity: ERROR
+    message: >-
+      exec.Command starts a shell (sh -c, bash -c, cmd /C) with a command that
+      is not a constant string. Shell metacharacters in it run further
+      commands. Call the program directly, exec.Command(name, args...), with
+      each argument separate.
+    patterns:
+      - pattern-either:
+          - pattern: exec.Command($SHELL, $FLAG, $CMD, ...)
+          - pattern: exec.CommandContext($CTX, $SHELL, $FLAG, $CMD, ...)
+      - metavariable-regex:
+          metavariable: $SHELL
+          regex: ^"((/usr)?/bin/)?(sh|bash|zsh|dash|ksh|cmd|cmd\.exe|powershell|pwsh)"$
+      - metavariable-regex:
+          metavariable: $FLAG
+          regex: ^"(-c|/c|/C|-Command)"$
+      - pattern-not: exec.Command($SHELL, $FLAG, "...", ...)
+      - pattern-not: exec.CommandContext($CTX, $SHELL, $FLAG, "...", ...)
+    metadata:
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      category: security
+      confidence: MEDIUM
+      security-severity: "9.8"
+      license: Apache-2.0

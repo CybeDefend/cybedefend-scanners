@@ -1,0 +1,65 @@
+# Copyright CybeDefend. Licensed under the Apache License, Version 2.0.
+rules:
+  - id: javascript-child-process-exec-concat
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      child_process.exec runs its command through a shell, and this command is
+      built by concatenation or a template literal. Shell metacharacters in the
+      inserted value run further commands. Use execFile or spawn with the
+      arguments as an array.
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      $CP = require("child_process")
+                      ...
+                  - pattern-inside: |
+                      $CP = require("node:child_process")
+                      ...
+                  - pattern-inside: |
+                      import $CP from "child_process"
+                      ...
+                  - pattern-inside: |
+                      import $CP from "node:child_process"
+                      ...
+                  - pattern-inside: |
+                      import * as $CP from "child_process"
+                      ...
+                  - pattern-inside: |
+                      import * as $CP from "node:child_process"
+                      ...
+              - pattern: $CP.$EXEC($CMD, ...)
+          - pattern: require("child_process").$EXEC($CMD, ...)
+          - pattern: require("node:child_process").$EXEC($CMD, ...)
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      import { ..., $EXEC, ... } from "child_process"
+                      ...
+                  - pattern-inside: |
+                      import { ..., $EXEC, ... } from "node:child_process"
+                      ...
+                  - pattern-inside: |
+                      const { ..., $EXEC, ... } = require("child_process")
+                      ...
+                  - pattern-inside: |
+                      const { ..., $EXEC, ... } = require("node:child_process")
+                      ...
+              - pattern: $EXEC($CMD, ...)
+      - metavariable-regex:
+          metavariable: $EXEC
+          regex: ^(exec|execSync)$
+      - metavariable-pattern:
+          metavariable: $CMD
+          pattern-either:
+            - pattern: $A + $B
+            - pattern: "`...${$X}...`"
+    metadata:
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      category: security
+      confidence: MEDIUM
+      security-severity: "9.8"
+      license: Apache-2.0

@@ -1,0 +1,19 @@
+# Copyright CybeDefend. Licensed under the Apache License, Version 2.0.
+rules:
+  - id: python-exec
+    languages: [python]
+    severity: ERROR
+    message: >-
+      exec() runs its argument as Python statements. A value that is not a
+      constant string lets whoever controls it run arbitrary code in this
+      process. Call the intended functions directly instead of building code.
+    patterns:
+      - pattern: exec($CODE, ...)
+      - pattern-not: exec("...", ...)
+    metadata:
+      cwe:
+        - "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"
+      category: security
+      confidence: MEDIUM
+      security-severity: "9.8"
+      license: Apache-2.0

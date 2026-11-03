@@ -1,0 +1,27 @@
+# Copyright CybeDefend. Licensed under the Apache License, Version 2.0.
+rules:
+  - id: java-runtime-exec-concat
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Runtime.exec receives a command built by concatenation or
+      String.format. Runtime.exec splits that string on spaces, so the
+      inserted value can add arguments, and through "sh -c" whole commands.
+      Pass the program and each argument separately, as a String[] or to
+      ProcessBuilder.
+    patterns:
+      - pattern-either:
+          - pattern: Runtime.getRuntime().exec($CMD, ...)
+          - pattern: (Runtime $RT).exec($CMD, ...)
+      - metavariable-pattern:
+          metavariable: $CMD
+          pattern-either:
+            - pattern: $A + $B
+            - pattern: String.format(...)
+    metadata:
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      category: security
+      confidence: MEDIUM
+      security-severity: "9.8"
+      license: Apache-2.0

@@ -1,0 +1,23 @@
+# Copyright CybeDefend. Licensed under the Apache License, Version 2.0.
+rules:
+  - id: python-subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: >-
+      This subprocess call runs a command that is not a constant string through
+      a shell (shell=True). Shell metacharacters in any part of it (;, |, $(),
+      backquotes) run further commands. Pass the program and its arguments as a
+      list, without shell=True.
+    patterns:
+      - pattern: subprocess.$FUNC($CMD, ..., shell=True, ...)
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: ^(run|call|check_call|check_output|Popen)$
+      - pattern-not: subprocess.$FUNC("...", ..., shell=True, ...)
+    metadata:
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      category: security
+      confidence: MEDIUM
+      security-severity: "9.8"
+      license: Apache-2.0

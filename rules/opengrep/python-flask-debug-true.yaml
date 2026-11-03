@@ -1,0 +1,22 @@
+# Copyright CybeDefend. Licensed under the Apache License, Version 2.0.
+rules:
+  - id: python-flask-debug-true
+    languages: [python]
+    severity: WARNING
+    message: >-
+      The Flask application runs with debug=True. The debugger shows stack
+      traces and source to any visitor and can run code on the server from the
+      browser. Read the setting from the environment and leave it off outside
+      local development.
+    patterns:
+      - pattern-inside: |
+          $APP = flask.Flask(...)
+          ...
+      - pattern: $APP.run(..., debug=True, ...)
+    metadata:
+      cwe:
+        - "CWE-489: Active Debug Code"
+      category: security
+      confidence: HIGH
+      security-severity: "5.0"
+      license: Apache-2.0

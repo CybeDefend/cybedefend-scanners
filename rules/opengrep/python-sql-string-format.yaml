@@ -1,0 +1,30 @@
+# Copyright CybeDefend. Licensed under the Apache License, Version 2.0.
+rules:
+  - id: python-sql-string-format
+    languages: [python]
+    severity: ERROR
+    message: >-
+      This SQL statement is built with string formatting (%, .format(), an
+      f-string or +) and then executed. A value with a quote in it changes the
+      statement. Keep the statement constant and pass the values as
+      parameters: cursor.execute("... WHERE id = %s", (value,)).
+    patterns:
+      - pattern-either:
+          - pattern: $CUR.execute($QUERY, ...)
+          - pattern: $CUR.executemany($QUERY, ...)
+          - pattern: $CUR.executescript($QUERY, ...)
+      - metavariable-pattern:
+          metavariable: $QUERY
+          pattern-either:
+            - pattern: '"..." % $ARGS'
+            - pattern: '"...".format(...)'
+            - pattern: f"...{$X}..."
+            - pattern: '"..." + $X'
+            - pattern: $X + "..."
+    metadata:
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      category: security
+      confidence: MEDIUM
+      security-severity: "8.8"
+      license: Apache-2.0

@@ -1,0 +1,30 @@
+# Copyright CybeDefend. Licensed under the Apache License, Version 2.0.
+rules:
+  - id: python-yaml-unsafe-load
+    languages: [python]
+    severity: ERROR
+    message: >-
+      This PyYAML call builds arbitrary Python objects from the document (the
+      Loader, UnsafeLoader and FullLoader loaders, or unsafe_load). A document
+      from outside the program can then run code while it is loaded. Use
+      yaml.safe_load, or yaml.load with Loader=yaml.SafeLoader.
+    pattern-either:
+      - pattern: yaml.unsafe_load(...)
+      - pattern: yaml.unsafe_load_all(...)
+      - patterns:
+          - pattern-either:
+              - pattern: yaml.$FUNC($DATA, Loader=yaml.$LOADER, ...)
+              - pattern: yaml.$FUNC($DATA, yaml.$LOADER, ...)
+          - metavariable-regex:
+              metavariable: $FUNC
+              regex: ^load(_all)?$
+          - metavariable-regex:
+              metavariable: $LOADER
+              regex: ^(Loader|UnsafeLoader|FullLoader)$
+    metadata:
+      cwe:
+        - "CWE-502: Deserialization of Untrusted Data"
+      category: security
+      confidence: HIGH
+      security-severity: "7.5"
+      license: Apache-2.0

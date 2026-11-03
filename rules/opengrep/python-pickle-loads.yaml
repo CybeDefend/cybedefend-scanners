@@ -1,0 +1,23 @@
+# Copyright CybeDefend. Licensed under the Apache License, Version 2.0.
+rules:
+  - id: python-pickle-loads
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Unpickling runs code chosen by whoever wrote the bytes: a pickle from a
+      request, a file or a cache that another party can write lets it run
+      arbitrary code here. Exchange data in a format without code (JSON), or
+      sign and verify the bytes before loading them.
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+      - pattern: pickle.Unpickler(...)
+      - pattern: _pickle.loads(...)
+      - pattern: _pickle.load(...)
+    metadata:
+      cwe:
+        - "CWE-502: Deserialization of Untrusted Data"
+      category: security
+      confidence: MEDIUM
+      security-severity: "7.5"
+      license: Apache-2.0
