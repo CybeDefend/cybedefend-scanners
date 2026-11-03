@@ -208,3 +208,42 @@ func TestNoSampleWorkflowRunsInThisRepository(t *testing.T) {
 		t.Fatalf("pull_request_target found in this repository's workflows: %v", hits)
 	}
 }
+
+var (
+	// ownOutDirRe is a RUN that creates the default --out directory and hands
+	// that directory (not a tree) to uid 65532.
+	ownOutDirRe = regexp.MustCompile(`\bmkdir\s+-p\s+/tmp/appsec-scanner(/\S*)?(\s|$)[\s\S]*\bchown\s+65532:65532\s+(\S+\s+)*/tmp/appsec-scanner(\s|$)`)
+	// copyOutDirRe is a COPY that brings an empty appsec-scanner directory
+	// under /tmp, owned by uid 65532, for a tool image built without a RUN.
+	copyOutDirRe = regexp.MustCompile(`^--from=\S+\s+--chown=65532:65532\s+\S+/tmp/\s+/tmp/$`)
+	recursiveRe  = regexp.MustCompile(`\bchown\s+(-\S*R|--recursive)\b`)
+)
+
+// The default --out is /tmp/appsec-scanner/results.sarif: every image creates
+// that directory for uid 65532, so that it runs without a mounted --out.
+func TestImagesGiveTheDefaultOutDirToTheScannerUser(t *testing.T) {
+	for _, path := range dockerfiles(t) {
+		ins := parse(t, path)
+		lastFrom := -1
+		for i, in := range ins {
+			if in.keyword == "FROM" {
+				lastFrom = i
+			}
+			if in.keyword == "RUN" && recursiveRe.MatchString(in.args) {
+				t.Errorf("%s:%d: a recursive chown", path, in.line)
+			}
+		}
+		var owned bool
+		for _, in := range ins[lastFrom+1:] {
+			switch in.keyword {
+			case "RUN":
+				owned = owned || ownOutDirRe.MatchString(in.args)
+			case "COPY":
+				owned = owned || copyOutDirRe.MatchString(in.args)
+			}
+		}
+		if !owned {
+			t.Errorf("%s: the final stage does not create /tmp/appsec-scanner owned by 65532:65532", path)
+		}
+	}
+}

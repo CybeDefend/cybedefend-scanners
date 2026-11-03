@@ -26,6 +26,9 @@ LABEL org.opencontainers.image.title="appsec-scanners-gitleaks" \
 COPY --from=gitleaks /usr/bin/gitleaks /usr/bin/gitleaks
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
 COPY LICENSE NOTICE /usr/share/doc/appsec-scanners/
+# The default --out (/tmp/appsec-scanner/results.sarif) is written by uid
+# 65532: that empty directory only is handed to it, nothing recursive.
+RUN mkdir -p /tmp/appsec-scanner && chown 65532:65532 /tmp/appsec-scanner
 WORKDIR /src
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/appsec-scanner","run","gitleaks"]

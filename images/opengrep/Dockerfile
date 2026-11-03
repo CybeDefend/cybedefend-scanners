@@ -33,6 +33,9 @@ FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde
 COPY --from=opengrep /out-opengrep /usr/local/bin/opengrep
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
 COPY rules/opengrep /opt/appsec-scanners/rules/opengrep
+# The default --out (/tmp/appsec-scanner/results.sarif) is written by uid
+# 65532: that empty directory only is handed to it, nothing recursive.
+RUN mkdir -p /tmp/appsec-scanner && chown 65532:65532 /tmp/appsec-scanner
 ENV HOME=/tmp
 USER 65532:65532
 WORKDIR /tmp
