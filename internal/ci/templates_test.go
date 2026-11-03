@@ -419,3 +419,289 @@ func TestSelfTestCoversEveryScanner(t *testing.T) {
 		}
 	}
 }
+
+type workflowStep struct {
+	Name string            `yaml:"name"`
+	ID   string            `yaml:"id"`
+	If   string            `yaml:"if"`
+	Uses string            `yaml:"uses"`
+	Run  string            `yaml:"run"`
+	With map[string]string `yaml:"with"`
+	Env  map[string]string `yaml:"env"`
+}
+
+type workflowJob struct {
+	Needs       yaml.Node         `yaml:"needs"`
+	Permissions map[string]string `yaml:"permissions"`
+	Strategy    struct {
+		Matrix struct {
+			Include []map[string]string `yaml:"include"`
+		} `yaml:"matrix"`
+	} `yaml:"strategy"`
+	Steps []workflowStep `yaml:"steps"`
+}
+
+type workflow struct {
+	On          map[string]yaml.Node   `yaml:"on"`
+	Permissions yaml.Node              `yaml:"permissions"`
+	Jobs        map[string]workflowJob `yaml:"jobs"`
+}
+
+func (s workflowStep) uses(action string) bool { return strings.HasPrefix(s.Uses, action+"@") }
+
+// pushes is a build-push-action step that pushes.
+func (s workflowStep) pushes() bool {
+	return s.uses("docker/build-push-action") && s.With["push"] == "true"
+}
+
+// TestReleaseWorkflow: a v* tag a maintainer pushes publishes the six images,
+// multi-arch, under :<version>, :<major> and :latest, after the integration
+// suite passed on the amd64 image, then creates the release with the digests.
+func TestReleaseWorkflow(t *testing.T) {
+	data := read(t, ".github/workflows/release.yml")
+	var wf workflow
+	if err := yaml.Unmarshal(data, &wf); err != nil {
+		t.Fatalf("release.yml: %v", err)
+	}
+
+	// Trigger: push of a v* tag, nothing else.
+	if len(wf.On) != 1 {
+		t.Errorf("release.yml triggers on %d events, want push only", len(wf.On))
+	}
+	push, ok := wf.On["push"]
+	if !ok {
+		t.Fatal("release.yml does not trigger on push")
+	}
+	var pushFilter map[string][]string
+	if err := push.Decode(&pushFilter); err != nil {
+		t.Fatalf("on.push: %v", err)
+	}
+	if len(pushFilter) != 1 || strings.Join(pushFilter["tags"], ",") != "v*" {
+		t.Errorf("on.push = %v, want tags: ['v*'] only", pushFilter)
+	}
+
+	// Permissions: nothing at the workflow level; each job asks for its own,
+	// and the release as a whole writes contents and packages only.
+	var top map[string]string
+	if wf.Permissions.Kind != 0 {
+		if err := wf.Permissions.Decode(&top); err != nil {
+			t.Fatalf("top-level permissions: %v", err)
+		}
+	}
+	for k, v := range top {
+		if v != "read" && v != "none" {
+			t.Errorf("top-level permission %s: %s, want read or none (each job asks for its writes)", k, v)
+		}
+	}
+	writes := map[string]bool{}
+	var imagesJob, releaseJob string
+	for name, job := range wf.Jobs {
+		if job.Permissions == nil {
+			t.Errorf("job %s declares no permissions", name)
+		}
+		pushesImages, createsRelease := false, false
+		for _, s := range job.Steps {
+			if s.pushes() {
+				pushesImages = true
+			}
+			if strings.Contains(s.Run, "gh release create") {
+				createsRelease = true
+			}
+		}
+		if pushesImages {
+			imagesJob = name
+		}
+		if createsRelease {
+			releaseJob = name
+		}
+		for scope, level := range job.Permissions {
+			if level != "write" {
+				continue
+			}
+			writes[scope] = true
+			switch {
+			case scope == "packages" && !pushesImages:
+				t.Errorf("job %s writes packages but pushes no image", name)
+			case scope == "contents" && !createsRelease:
+				t.Errorf("job %s writes contents but creates no release", name)
+			case scope != "packages" && scope != "contents":
+				t.Errorf("job %s writes %s", name, scope)
+			}
+		}
+	}
+	if !writes["contents"] || !writes["packages"] || len(writes) != 2 {
+		t.Errorf("write permissions = %v, want contents and packages", writes)
+	}
+	if imagesJob == "" {
+		t.Fatal("no job pushes the images")
+	}
+	if releaseJob == "" {
+		t.Fatal("no job creates the GitHub release")
+	}
+	if imagesJob == releaseJob {
+		t.Error("the job that pushes the images also creates the release: packages and contents writes would share a token")
+	}
+
+	// A matrix over the six adapters, each with its own integration tests.
+	images := wf.Jobs[imagesJob]
+	var got []string
+	for _, entry := range images.Strategy.Matrix.Include {
+		got = append(got, entry["adapter"])
+		if entry["tests"] == "" {
+			t.Errorf("matrix entry %s names no integration tests", entry["adapter"])
+		}
+	}
+	sort.Strings(got)
+	var want []string
+	for a := range adapters {
+		want = append(want, a)
+	}
+	sort.Strings(want)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("matrix adapters = %v, want %v", got, want)
+	}
+
+	// The version is the tag without its leading v, the major its first number.
+	versionStep := -1
+	for i, s := range images.Steps {
+		if strings.Contains(s.Run, "${GITHUB_REF_NAME#v}") && strings.Contains(s.Run, "GITHUB_OUTPUT") {
+			versionStep = i
+		}
+	}
+	if versionStep < 0 {
+		t.Fatal("no step derives the version from ${GITHUB_REF_NAME#v}")
+	}
+	vs := images.Steps[versionStep]
+	if vs.ID == "" || !strings.Contains(vs.Run, "version=") || !strings.Contains(vs.Run, "major=") {
+		t.Errorf("the version step (id %q) does not output version and major", vs.ID)
+	}
+	if !strings.Contains(vs.Run, "exit 1") {
+		t.Error("the version step does not refuse a tag that is not vMAJOR.MINOR.PATCH")
+	}
+	version := "${{ steps." + vs.ID + ".outputs.version }}"
+	major := "${{ steps." + vs.ID + ".outputs.major }}"
+	repo := "ghcr.io/cybedefend/appsec-scanners-${{ matrix.adapter }}"
+
+	// amd64 build loaded locally, then the integration suite, then the push.
+	load, integration, pushStep := -1, -1, -1
+	for i, s := range images.Steps {
+		switch {
+		case s.uses("docker/build-push-action") && s.With["load"] == "true":
+			load = i
+			if s.With["platforms"] != "linux/amd64" {
+				t.Errorf("the local build is for %q, want linux/amd64", s.With["platforms"])
+			}
+			if !strings.Contains(s.With["tags"], "appsec-scanners-${{ matrix.adapter }}:dev") {
+				t.Errorf("the local build tags %q, want the tag the integration suite runs", s.With["tags"])
+			}
+			if s.With["push"] == "true" {
+				t.Error("the local build pushes")
+			}
+		case strings.Contains(s.Run, "go test") && strings.Contains(s.Run, "-tags integration") && strings.Contains(s.Run, "./test/integration/"):
+			integration = i
+			if !strings.Contains(s.Run, "-run") || s.Env["TESTS"] != "${{ matrix.tests }}" {
+				t.Error("the integration step does not run the matrix entry's tests")
+			}
+		case s.pushes():
+			pushStep = i
+		}
+	}
+	if load < 0 || integration < 0 || pushStep < 0 {
+		t.Fatalf("steps: local build %d, integration %d, push %d; want all three", load, integration, pushStep)
+	}
+	if !(load < integration && integration < pushStep) {
+		t.Errorf("order: local build %d, integration %d, push %d; want build, then tests, then push", load, integration, pushStep)
+	}
+	for _, i := range []int{load, pushStep} {
+		s := images.Steps[i]
+		if s.With["file"] != "images/${{ matrix.adapter }}/Dockerfile" || s.With["context"] != "." {
+			t.Errorf("step %q builds file %q in %q, want images/${{ matrix.adapter }}/Dockerfile in .", s.Name, s.With["file"], s.With["context"])
+		}
+		if strings.TrimSpace(s.With["build-args"]) != "VERSION="+version {
+			t.Errorf("step %q: build-args %q, want VERSION=%s", s.Name, s.With["build-args"], version)
+		}
+	}
+	ps := images.Steps[pushStep]
+	if ps.With["platforms"] != "linux/amd64,linux/arm64" {
+		t.Errorf("the push builds %q, want linux/amd64,linux/arm64", ps.With["platforms"])
+	}
+	var tags []string
+	for _, line := range strings.Split(ps.With["tags"], "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			tags = append(tags, line)
+		}
+	}
+	sort.Strings(tags)
+	wantTags := []string{repo + ":" + major, repo + ":" + version, repo + ":latest"}
+	sort.Strings(wantTags)
+	if strings.Join(tags, " ") != strings.Join(wantTags, " ") {
+		t.Errorf("the push tags %v, want %v", tags, wantTags)
+	}
+	if ps.ID == "" {
+		t.Error("the push step has no id, so its digest cannot be read")
+	}
+	login := -1
+	for i, s := range images.Steps {
+		if s.uses("docker/login-action") {
+			login = i
+			if s.With["registry"] != "ghcr.io" || s.With["password"] != "${{ secrets.GITHUB_TOKEN }}" {
+				t.Errorf("the login step: registry %q, password %q; want ghcr.io with the job's GITHUB_TOKEN", s.With["registry"], s.With["password"])
+			}
+		}
+	}
+	if login < 0 || login < integration || login > pushStep {
+		t.Errorf("the registry login (step %d) is not between the integration suite (%d) and the push (%d)", login, integration, pushStep)
+	}
+
+	// The digest of each image reaches the release notes.
+	digestRef := "steps." + ps.ID + ".outputs.digest"
+	carried := false
+	for _, s := range images.Steps[pushStep+1:] {
+		for _, v := range s.Env {
+			if strings.Contains(v, digestRef) {
+				carried = true
+			}
+		}
+	}
+	if !carried {
+		t.Errorf("no step after the push reads %s", digestRef)
+	}
+	rel := wf.Jobs[releaseJob]
+	var needs []string
+	if rel.Needs.Kind == yaml.ScalarNode {
+		needs = []string{rel.Needs.Value}
+	} else if err := rel.Needs.Decode(&needs); err != nil {
+		t.Fatalf("jobs.%s.needs: %v", releaseJob, err)
+	}
+	if !strings.Contains(strings.Join(needs, ","), imagesJob) {
+		t.Errorf("the release job needs %v, want %s", needs, imagesJob)
+	}
+	downloads, notes := false, false
+	for _, s := range rel.Steps {
+		if s.uses("actions/download-artifact") {
+			downloads = true
+		}
+		if strings.Contains(s.Run, "gh release create") && strings.Contains(s.Run, "--notes-file") && strings.Contains(s.Run, "--verify-tag") {
+			notes = true
+		}
+	}
+	if !downloads || !notes {
+		t.Errorf("the release job: downloads the digests %v, creates the release from a notes file on the pushed tag %v", downloads, notes)
+	}
+
+	// Every action pinned by commit, no expression inside a script, no secret
+	// in a script.
+	for name, job := range wf.Jobs {
+		for _, s := range job.Steps {
+			if s.Uses != "" && !pinned.MatchString(s.Uses) {
+				t.Errorf("job %s step %q uses %s, want <owner>/<repo>@<40-hex sha>", name, s.Name, s.Uses)
+			}
+			if strings.Contains(s.Run, "${{") {
+				t.Errorf("job %s step %q substitutes an expression into its script", name, s.Name)
+			}
+			if s.uses("actions/checkout") && s.With["persist-credentials"] != "false" {
+				t.Errorf("job %s: checkout keeps the token in .git/config", name)
+			}
+		}
+	}
+}
