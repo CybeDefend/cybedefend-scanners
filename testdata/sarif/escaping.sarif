@@ -1,0 +1,17 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "example" } },
+      "results": [
+        { "ruleId": "A", "message": { "text": "climbs out" },
+          "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "../etc/passwd" } } } ] },
+        { "ruleId": "B", "message": { "text": "absolute outside the root" },
+          "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "file:///etc/passwd" } } } ] },
+        { "ruleId": "C", "message": { "text": "inside the root" },
+          "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "app/ok.py" } } } ] },
+        { "ruleId": "D", "message": { "text": "no location at all" } }
+      ]
+    }
+  ]
+}

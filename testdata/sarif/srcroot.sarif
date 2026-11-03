@@ -1,0 +1,13 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "example" } },
+      "originalUriBaseIds": { "%SRCROOT%": { "uri": "file:///src/" } },
+      "results": [
+        { "ruleId": "A", "message": { "text": "relative to a base id" },
+          "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "a.py", "uriBaseId": "%SRCROOT%" }, "region": { "startLine": 1 } } } ] }
+      ]
+    }
+  ]
+}

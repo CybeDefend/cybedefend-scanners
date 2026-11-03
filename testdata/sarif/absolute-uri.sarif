@@ -1,0 +1,18 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "example" } },
+      "results": [
+        { "ruleId": "A", "message": { "text": "file URI" },
+          "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "file:///src/app/main.py" }, "region": { "startLine": 1 } } } ] },
+        { "ruleId": "B", "message": { "text": "absolute path" },
+          "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "/src/app/x.tf" }, "region": { "startLine": 2 } } } ] },
+        { "ruleId": "C", "message": { "text": "dot-relative path" },
+          "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "./app/y" }, "region": { "startLine": 3 } } } ] },
+        { "ruleId": "D", "message": { "text": "already relative" },
+          "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "app/z.go" }, "region": { "startLine": 4 } } } ] }
+      ]
+    }
+  ]
+}
