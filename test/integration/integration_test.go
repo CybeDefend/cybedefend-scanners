@@ -10,21 +10,16 @@
 package integration
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
-	"net/http"
-	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
-	"strings"
-	"sync"
 	"testing"
 	"time"
+
+	"github.com/cybedefend/cybedefend-scanners/internal/fakeapi"
 )
 
 const (
@@ -72,64 +67,55 @@ func buildImage(t *testing.T, adapter string) string {
 	return name
 }
 
-// upload is one request the fake API received.
+// upload is one request the fake API received, as the tests read it.
 type upload struct {
 	Authorization string
 	UserAgent     string
-	Fields        map[string]string
-	FileName      string
-	// Raw is the file part as sent; SARIF is it decompressed.
-	Raw   []byte
+	// Fields holds every non-file part; « image » only when it was sent.
+	Fields   map[string]string
+	FileName string
+	// SARIF is the file part, decompressed.
 	SARIF []byte
 }
 
-// fakeAPI is an inline import API until internal/fakeapi exists.
+// fakeAPI wraps internal/fakeapi for the tests of this package.
 type fakeAPI struct {
-	URL     string
-	mu      sync.Mutex
-	uploads []upload
+	URL string
+	srv *fakeapi.Server
 }
 
+// Uploads returns what the API accepted, oldest first.
 func (f *fakeAPI) Uploads() []upload {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]upload(nil), f.uploads...)
+	var out []upload
+	for _, u := range f.srv.Uploads() {
+		fields := map[string]string{"type": u.Type, "branch": u.Branch, "format": u.Format}
+		for _, name := range u.Fields {
+			if name == "image" {
+				fields["image"] = u.Image
+			}
+		}
+		out = append(out, upload{
+			Authorization: u.Authorization,
+			UserAgent:     u.UserAgent,
+			Fields:        fields,
+			FileName:      u.Filename,
+			SARIF:         u.Body,
+		})
+	}
+	return out
 }
 
-// startFakeAPI listens on 0.0.0.0 and answers the import route with 202.
+// startFakeAPI listens on 0.0.0.0, so that a container on the host network
+// reaches it, and accepts the test token.
 func startFakeAPI(t *testing.T) *fakeAPI {
 	t.Helper()
 	ln, err := net.Listen("tcp", "0.0.0.0:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fakeAPI{}
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		want := "/project/" + testProjectID + "/scan/import/start"
-		if r.Method != http.MethodPost || r.URL.Path != want {
-			http.Error(w, `{"code":"NOT_FOUND"}`, http.StatusNotFound)
-			return
-		}
-		u, err := readUpload(r)
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = io.WriteString(w, `{"code":"IMPORT_INVALID_REQUEST"}`)
-			return
-		}
-		f.mu.Lock()
-		f.uploads = append(f.uploads, u)
-		f.mu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = io.WriteString(w, `{"scanId":"11111111-2222-4333-8444-555555555555"}`)
-	}))
-	srv.Listener.Close()
-	srv.Listener = ln
-	srv.Start()
+	srv := fakeapi.NewOn(testToken, ln)
 	t.Cleanup(srv.Close)
-	f.URL = "http://127.0.0.1:" + portOf(t, ln.Addr())
-	return f
+	return &fakeAPI{URL: "http://127.0.0.1:" + portOf(t, ln.Addr()), srv: srv}
 }
 
 func portOf(t *testing.T, a net.Addr) string {
@@ -139,51 +125,6 @@ func portOf(t *testing.T, a net.Addr) string {
 		t.Fatal(err)
 	}
 	return port
-}
-
-func readUpload(r *http.Request) (upload, error) {
-	u := upload{
-		Authorization: r.Header.Get("Authorization"),
-		UserAgent:     r.Header.Get("User-Agent"),
-		Fields:        map[string]string{},
-	}
-	mr, err := r.MultipartReader()
-	if err != nil {
-		return u, err
-	}
-	for {
-		p, err := mr.NextPart()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return u, err
-		}
-		data, err := io.ReadAll(io.LimitReader(p, 60<<20))
-		if err != nil {
-			return u, err
-		}
-		if p.FormName() == "file" {
-			u.FileName = p.FileName()
-			u.Raw = data
-			continue
-		}
-		u.Fields[p.FormName()] = string(data)
-	}
-	if u.Raw == nil {
-		return u, errors.New("no file part")
-	}
-	u.SARIF = u.Raw
-	if strings.HasSuffix(u.FileName, ".gz") {
-		zr, err := gzip.NewReader(bytes.NewReader(u.Raw))
-		if err != nil {
-			return u, err
-		}
-		if u.SARIF, err = io.ReadAll(zr); err != nil {
-			return u, err
-		}
-	}
-	return u, nil
 }
 
 // runImage runs the adapter's image with sampleDir mounted read-only at /src

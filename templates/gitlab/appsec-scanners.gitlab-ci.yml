@@ -1,0 +1,104 @@
+# CybeDefend AppSec scanners for GitLab CI.
+#
+# Include this file, then extend the hidden jobs you want:
+#
+#   include:
+#     - remote: https://raw.githubusercontent.com/CybeDefend/cybedefend-scanners/<tag>/templates/gitlab/appsec-scanners.gitlab-ci.yml
+#
+#   sast:
+#     extends: .cybedefend-sast
+#
+# Set these CI/CD variables in the project's settings (Settings > CI/CD >
+# Variables), never in a .gitlab-ci.yml file:
+#   CYBEDEFEND_API_URL     the instance's API URL, such as https://appsec.example.com/api
+#   CYBEDEFEND_PROJECT_ID  the CybeDefend project the results are imported into
+#   CYBEDEFEND_TOKEN       a personal access token with the start_scan
+#                          permission on the project: masked (and protected
+#                          when only protected branches scan)
+#
+# Each job runs one scanner image on $CI_PROJECT_DIR, uploads the normalised
+# SARIF with the branch $CI_COMMIT_REF_NAME, and keeps it as an artifact.
+#
+# .cybedefend-sca (trivy-fs) scans the repository root: an sca import is the
+# branch's whole dependency picture, and every package it does not report is
+# resolved. .cybedefend-container (trivy-image) scans the image named by
+# CYBEDEFEND_IMAGE, which the extending job sets, and pulls it with the job's
+# GitLab registry credentials. sca and container imports are accepted by a
+# Community Edition instance only.
+
+variables:
+  # The scanner image version: a release such as 1.2.0, or its major, 1.
+  CYBEDEFEND_SCANNERS_VERSION: "1"
+
+.cybedefend-sast:
+  image:
+    name: ghcr.io/cybedefend/appsec-scanners-opengrep:$CYBEDEFEND_SCANNERS_VERSION
+    entrypoint: [""]
+  variables:
+    CYBEDEFEND_IMAGE: ""
+  script:
+    - appsec-scanner run opengrep --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-opengrep.sarif" --upload
+  artifacts:
+    when: always
+    paths: [cybedefend-opengrep.sarif]
+
+.cybedefend-secret:
+  image:
+    name: ghcr.io/cybedefend/appsec-scanners-gitleaks:$CYBEDEFEND_SCANNERS_VERSION
+    entrypoint: [""]
+  variables:
+    CYBEDEFEND_IMAGE: ""
+  script:
+    - appsec-scanner run gitleaks --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-gitleaks.sarif" --upload
+  artifacts:
+    when: always
+    paths: [cybedefend-gitleaks.sarif]
+
+.cybedefend-iac:
+  image:
+    name: ghcr.io/cybedefend/appsec-scanners-trivy-config:$CYBEDEFEND_SCANNERS_VERSION
+    entrypoint: [""]
+  variables:
+    CYBEDEFEND_IMAGE: ""
+  script:
+    - appsec-scanner run trivy-config --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-trivy-config.sarif" --upload
+  artifacts:
+    when: always
+    paths: [cybedefend-trivy-config.sarif]
+
+.cybedefend-cicd:
+  image:
+    name: ghcr.io/cybedefend/appsec-scanners-zizmor:$CYBEDEFEND_SCANNERS_VERSION
+    entrypoint: [""]
+  variables:
+    CYBEDEFEND_IMAGE: ""
+  script:
+    - appsec-scanner run zizmor --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-zizmor.sarif" --upload
+  artifacts:
+    when: always
+    paths: [cybedefend-zizmor.sarif]
+
+.cybedefend-sca:
+  image:
+    name: ghcr.io/cybedefend/appsec-scanners-trivy-fs:$CYBEDEFEND_SCANNERS_VERSION
+    entrypoint: [""]
+  variables:
+    CYBEDEFEND_IMAGE: ""
+  script:
+    - appsec-scanner run trivy-fs --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-trivy-fs.sarif" --upload
+  artifacts:
+    when: always
+    paths: [cybedefend-trivy-fs.sarif]
+
+.cybedefend-container:
+  image:
+    name: ghcr.io/cybedefend/appsec-scanners-trivy-image:$CYBEDEFEND_SCANNERS_VERSION
+    entrypoint: [""]
+  variables:
+    TRIVY_USERNAME: $CI_REGISTRY_USER
+    TRIVY_PASSWORD: $CI_REGISTRY_PASSWORD
+  script:
+    - appsec-scanner run trivy-image --image "$CYBEDEFEND_IMAGE" --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-trivy-image.sarif" --upload
+  artifacts:
+    when: always
+    paths: [cybedefend-trivy-image.sarif]

@@ -1,0 +1,134 @@
+name: Action self-test
+
+# Runs this repository's action once per scanner, on the images built from
+# this commit, against the fake import API (cmd/fake-api), and checks what the
+# API received.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FAKE_API_TOKEN: test-token
+      # Every interface: the scanner containers reach it as host.docker.internal.
+      FAKE_API_ADDR: 0.0.0.0:8080
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.0'
+
+      - name: Build the six scanner images
+        run: |
+          set -euo pipefail
+          make images
+          for a in opengrep gitleaks trivy-config zizmor trivy-fs trivy-image; do
+            docker tag "appsec-scanners-$a:dev" "ghcr.io/cybedefend/appsec-scanners-$a:dev"
+          done
+
+      - name: Build the sample image
+        run: |
+          set -euo pipefail
+          # The context of testdata/samples/container-image, as the trivy-image
+          # integration test builds it: the Dockerfile, sca-npm's two files and
+          # the installed metadata of lodash 4.17.20.
+          ctx="$(mktemp -d)"
+          cp testdata/samples/container-image/Dockerfile "$ctx/"
+          cp testdata/samples/sca-npm/package.json testdata/samples/sca-npm/package-lock.json "$ctx/"
+          mkdir -p "$ctx/node_modules/lodash"
+          echo '{"name":"lodash","version":"4.17.20","license":"MIT"}' > "$ctx/node_modules/lodash/package.json"
+          docker build -t appsec-scanners-sample:test "$ctx"
+
+      - name: Start the fake import API
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/fake-api" ./cmd/fake-api
+          FAKE_API_DUMP="$RUNNER_TEMP/fake-api-dump.json" "$RUNNER_TEMP/fake-api" > "$RUNNER_TEMP/fake-api.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/fake-api.pid"
+          for _ in $(seq 1 50); do
+            if curl -s -o /dev/null http://localhost:8080/; then exit 0; fi
+            sleep 0.2
+          done
+          cat "$RUNNER_TEMP/fake-api.log"
+          exit 1
+
+      - uses: ./
+        with:
+          scanner: opengrep
+          path: testdata/samples/sast-python
+          project-id: 00000000-0000-4000-8000-000000000001
+          api-url: http://host.docker.internal:8080
+          token: test-token
+          version: dev
+      - uses: ./
+        with:
+          scanner: gitleaks
+          path: testdata/samples/secret-config
+          project-id: 00000000-0000-4000-8000-000000000001
+          api-url: http://host.docker.internal:8080
+          token: test-token
+          version: dev
+      - uses: ./
+        with:
+          scanner: trivy-config
+          path: testdata/samples/iac-terraform
+          project-id: 00000000-0000-4000-8000-000000000001
+          api-url: http://host.docker.internal:8080
+          token: test-token
+          version: dev
+      - uses: ./
+        with:
+          scanner: zizmor
+          path: testdata/samples/cicd-github-actions
+          project-id: 00000000-0000-4000-8000-000000000001
+          api-url: http://host.docker.internal:8080
+          token: test-token
+          version: dev
+      - uses: ./
+        with:
+          scanner: trivy-fs
+          path: testdata/samples/sca-npm
+          project-id: 00000000-0000-4000-8000-000000000001
+          api-url: http://host.docker.internal:8080
+          token: test-token
+          version: dev
+      - uses: ./
+        with:
+          scanner: trivy-image
+          image: appsec-scanners-sample:test
+          project-id: 00000000-0000-4000-8000-000000000001
+          api-url: http://host.docker.internal:8080
+          token: test-token
+          version: dev
+
+      - name: Stop the fake import API
+        if: always()
+        run: |
+          set -euo pipefail
+          pid="$(cat "$RUNNER_TEMP/fake-api.pid")"
+          kill -TERM "$pid"
+          while kill -0 "$pid" 2> /dev/null; do sleep 0.2; done
+          cat "$RUNNER_TEMP/fake-api.log"
+
+      - name: Check the six uploads
+        run: |
+          set -euo pipefail
+          dump="$RUNNER_TEMP/fake-api-dump.json"
+          test "$(jq length "$dump")" -eq 6
+          test "$(jq -r '[.[].Type] | sort | join(",")' "$dump")" = "cicd,container,iac,sast,sca,secret"
+          test "$(jq -r '[.[] | select(.Format != "sarif" or .ProjectID != "00000000-0000-4000-8000-000000000001" or .Branch == "")] | length' "$dump")" -eq 0
+          test "$(jq -r '.[] | select(.Type == "container") | .Image' "$dump")" = "appsec-scanners-sample:test"
+          test "$(jq -r '[.[] | select(.Type != "container") | select(.Image != "" or (.Fields | index("image")))] | length' "$dump")" -eq 0
+          test "$(jq -r '[.[] | select(.UserAgent | startswith("appsec-scanner/") | not)] | length' "$dump")" -eq 0
+          echo "six uploads: sast, secret, iac, cicd, sca and container, image on the container one only"

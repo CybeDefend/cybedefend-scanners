@@ -1,0 +1,64 @@
+# Example workflow: copy it to .github/workflows/cybedefend-appsec.yml.
+#
+# Repository settings it reads:
+#   secrets.CYBEDEFEND_TOKEN       a personal access token with the start_scan
+#                                  permission on the project
+#   vars.CYBEDEFEND_API_URL        the instance's API URL, such as https://appsec.example.com/api
+#   vars.CYBEDEFEND_PROJECT_ID     the CybeDefend project
+#
+# Replace @v1 with the full commit sha of the release you use (and set the
+# version input to that release, such as 1.2.0): a tag can be moved.
+name: CybeDefend AppSec
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # trivy-fs (sca) needs a Community Edition instance.
+        scanner: [opengrep, gitleaks, trivy-config, zizmor, trivy-fs]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: CybeDefend/cybedefend-scanners@v1
+        env:
+          # zizmor's online audits; the other scanners ignore it.
+          GH_TOKEN: ${{ github.token }}
+        with:
+          scanner: ${{ matrix.scanner }}
+          api-url: ${{ vars.CYBEDEFEND_API_URL }}
+          project-id: ${{ vars.CYBEDEFEND_PROJECT_ID }}
+          token: ${{ secrets.CYBEDEFEND_TOKEN }}
+
+  container:
+    # A container import needs a Community Edition instance.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the image
+        run: docker build -t my-app:ci .
+      - id: cybedefend
+        uses: CybeDefend/cybedefend-scanners@v1
+        with:
+          scanner: trivy-image
+          image: my-app:ci
+          api-url: ${{ vars.CYBEDEFEND_API_URL }}
+          project-id: ${{ vars.CYBEDEFEND_PROJECT_ID }}
+          token: ${{ secrets.CYBEDEFEND_TOKEN }}
+      # Optional: also show the results in GitHub code scanning (needs
+      # security-events: write on the job).
+      # - uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+      #   with:
+      #     sarif_file: ${{ steps.cybedefend.outputs.sarif-file }}
