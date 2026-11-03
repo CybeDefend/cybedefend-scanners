@@ -158,10 +158,7 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 
 // toolEnv reads the keys a tool may receive; runner.Run filters them again.
 func toolEnv(a adapter.Adapter, getenv func(string) string) map[string]string {
-	keys := append([]string{}, runner.BaseEnvKeys...)
-	if p, ok := a.(adapter.EnvPassthrough); ok {
-		keys = append(keys, p.EnvKeys()...)
-	}
+	keys := append(append([]string{}, runner.BaseEnvKeys...), adapter.ToolEnvKeys(a)...)
 	env := make(map[string]string, len(keys))
 	for _, k := range keys {
 		if v := getenv(k); v != "" {

@@ -10,6 +10,7 @@ around it is Apache-2.0.
 | `appsec-scanners-gitleaks` | Gitleaks | 8.30.1 | MIT | https://github.com/gitleaks/gitleaks | image `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` (binary copied) |
 | `appsec-scanners-trivy-config` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied) |
 | `appsec-scanners-zizmor` | zizmor | 1.31.1 | MIT | https://github.com/zizmorcore/zizmor | image `ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9` (used as the final base) |
+| `appsec-scanners-trivy-fs` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied); vulnerability database downloaded at run time |
 
 ## Opengrep
 
@@ -33,7 +34,7 @@ source code, and the licence text, are at https://github.com/opengrep/opengrep
 
 ## Trivy
 
-- **Images:** `appsec-scanners-trivy-config`.
+- **Images:** `appsec-scanners-trivy-config`, `appsec-scanners-trivy-fs`.
 - **Project:** https://github.com/aquasecurity/trivy
 - **Version:** v0.76.1, from `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c`
   (multi-arch index; the binary `/usr/local/bin/trivy` is copied into the image).
@@ -45,6 +46,18 @@ source code, and the licence text, are at https://github.com/opengrep/opengrep
   the scan downloads nothing and runs with `--network none`. Trivy neither checks for a
   newer version nor sends usage data to Aqua (`--skip-version-check`, `--disable-telemetry`).
   Trivy exits 0 whatever it finds (`--exit-code 0`) and writes `security-severity` on its rules.
+- **Invocation (`trivy-fs`, import type `sca`):**
+  `trivy fs --scanners vuln --format sarif --output <file> --exit-code 0 --cache-dir /tmp/appsec-scanner/trivy-cache --skip-version-check --disable-telemetry --quiet <src>`.
+- **Data downloaded at run time (`trivy-fs`):** the image bakes no vulnerability
+  database. At each run Trivy downloads its vulnerability database from
+  `mirror.gcr.io/aquasec/trivy-db`, then `ghcr.io/aquasecurity/trivy-db` (and,
+  for Java projects, the Java index from `mirror.gcr.io/aquasec/trivy-java-db`,
+  then `ghcr.io/aquasecurity/trivy-java-db`) into
+  `/tmp/appsec-scanner/trivy-cache`.
+  `TRIVY_DB_REPOSITORY` and `TRIVY_JAVA_DB_REPOSITORY` name a mirror instead.
+  The database is published by Aqua Security and compiled from public
+  advisory sources, each under its own terms; see
+  <https://github.com/aquasecurity/trivy-db>.
 
 ## zizmor (image `appsec-scanners-zizmor`)
 

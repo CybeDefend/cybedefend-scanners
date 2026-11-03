@@ -5,6 +5,7 @@ package adapter
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -50,6 +51,39 @@ type Adapter interface {
 // listed.
 type EnvPassthrough interface {
 	EnvKeys() []string
+}
+
+// EnvForwarder is implemented by an adapter whose tool needs environment
+// variables besides PATH, HOME and TMPDIR: the keys are copied from the
+// runner's environment to the tool's when set. A CYBEDEFEND_* key is never
+// copied, even when listed.
+type EnvForwarder interface {
+	ForwardedEnv() []string
+}
+
+// forbiddenEnvPrefix marks this program's own variables, the token among them.
+const forbiddenEnvPrefix = "CYBEDEFEND_"
+
+// ToolEnvKeys returns the keys an adapter declares through EnvForwarder or
+// EnvPassthrough, in order, without duplicates, empty keys or CYBEDEFEND_* keys.
+func ToolEnvKeys(a Adapter) []string {
+	var declared []string
+	if f, ok := a.(EnvForwarder); ok {
+		declared = append(declared, f.ForwardedEnv()...)
+	}
+	if p, ok := a.(EnvPassthrough); ok {
+		declared = append(declared, p.EnvKeys()...)
+	}
+	keys := make([]string, 0, len(declared))
+	seen := make(map[string]bool, len(declared))
+	for _, k := range declared {
+		if k == "" || seen[k] || strings.HasPrefix(strings.ToUpper(k), forbiddenEnvPrefix) {
+			continue
+		}
+		seen[k] = true
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 var (

@@ -189,3 +189,37 @@ func (emptyAdapter) Name() string                                               
 func (emptyAdapter) Type() adapter.ImportType                                   { return adapter.TypeSAST }
 func (emptyAdapter) Command(string, string, map[string]string) ([]string, bool) { return nil, false }
 func (emptyAdapter) SuccessExitCodes() []int                                    { return []int{0} }
+
+// forwardingAdapter declares its tool's keys through adapter.EnvForwarder.
+type forwardingAdapter struct {
+	fakeAdapter
+	forwarded []string
+}
+
+func (f *forwardingAdapter) ForwardedEnv() []string { return f.forwarded }
+
+func TestRunForwardsDeclaredKeysOnly(t *testing.T) {
+	dump := filepath.Join(t.TempDir(), "env.txt")
+	a := &forwardingAdapter{
+		fakeAdapter: fakeAdapter{flags: []string{"--env-dump", dump}, sarif: minimalSARIF(t)},
+		forwarded:   []string{"TRIVY_DB_REPOSITORY", "CYBEDEFEND_TOKEN"},
+	}
+	env := map[string]string{
+		"PATH":                "/usr/bin:/bin",
+		"TRIVY_DB_REPOSITORY": "mirror.example/trivy-db",
+		"TRIVY_OTHER":         "x",
+		"CYBEDEFEND_TOKEN":    "t",
+	}
+	if _, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, env); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	raw, err := os.ReadFile(dump)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	want := []string{"PATH=/usr/bin:/bin", "TRIVY_DB_REPOSITORY=mirror.example/trivy-db"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("the tool's environment = %q, want %q", got, want)
+	}
+}

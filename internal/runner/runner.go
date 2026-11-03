@@ -45,10 +45,10 @@ type Result struct {
 }
 
 // Run runs the adapter's tool on src, writing its SARIF to out. The tool's
-// environment is the keys of BaseEnvKeys and of the adapter's EnvKeys found
-// in env, never a CYBEDEFEND_* key. An exit code outside the adapter's
-// success set, a timeout or a missing SARIF is an error; the Result is
-// returned with it when the tool ran.
+// environment is the keys of BaseEnvKeys and of the keys the adapter declares
+// (ForwardedEnv, EnvKeys) found in env, never a CYBEDEFEND_* key. An exit
+// code outside the adapter's success set, a timeout or a missing SARIF is an
+// error; the Result is returned with it when the tool ran.
 func Run(ctx context.Context, a adapter.Adapter, src, out string, timeout time.Duration, env map[string]string) (*Result, error) {
 	childEnv := toolEnv(a, env)
 	argv, onStdout := a.Command(src, out, childEnv)
@@ -134,10 +134,9 @@ func Run(ctx context.Context, a adapter.Adapter, src, out string, timeout time.D
 
 // toolEnv keeps the base keys and the adapter's own keys, never CYBEDEFEND_*.
 func toolEnv(a adapter.Adapter, env map[string]string) map[string]string {
-	keys := slices.Clone(BaseEnvKeys)
-	if p, ok := a.(adapter.EnvPassthrough); ok {
-		keys = append(keys, p.EnvKeys()...)
-	}
+	// The base keys first, then the keys the adapter declares
+	// (adapter.EnvForwarder, adapter.EnvPassthrough).
+	keys := append(slices.Clone(BaseEnvKeys), adapter.ToolEnvKeys(a)...)
 	out := make(map[string]string, len(keys))
 	for _, k := range keys {
 		if k == "" || strings.HasPrefix(strings.ToUpper(k), forbiddenPrefix) {
