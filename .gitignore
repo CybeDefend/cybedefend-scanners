@@ -1,0 +1,22 @@
+# Build output
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.*
+
+# SARIF written by local runs
+*.sarif
+*.sarif.gz
+!testdata/**/*.sarif
+
+# Local environment
+.env
+.env.*
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
