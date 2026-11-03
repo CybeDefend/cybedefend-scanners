@@ -30,8 +30,9 @@ func (Opengrep) Name() string { return "opengrep" }
 func (Opengrep) Type() ImportType { return TypeSAST }
 
 // ForwardedEnv implements EnvForwarder: OPENGREP_CONFIG, so that Command can
-// read it.
-func (Opengrep) ForwardedEnv() []string { return []string{OpengrepConfigEnv} }
+// read it, and XDG_CACHE_HOME, where the image unpacked Opengrep's one-file
+// binary at build time (otherwise it unpacks itself under HOME at each run).
+func (Opengrep) ForwardedEnv() []string { return []string{OpengrepConfigEnv, "XDG_CACHE_HOME"} }
 
 // SuccessExitCodes implements Adapter: Opengrep exits 0 with findings unless
 // --error is given, which this adapter never does.

@@ -66,6 +66,8 @@ func Run(ctx context.Context, a adapter.Adapter, src, out string, timeout time.D
 		}
 	}
 
+	ensureToolDirs(childEnv)
+
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	// argv goes to the kernel as a list: never through a shell.
@@ -130,6 +132,23 @@ func Run(ctx context.Context, a adapter.Adapter, src, out string, timeout time.D
 	}
 	res.SARIF = data
 	return res, nil
+}
+
+// toolDirKeys name the directories a tool writes besides its output: the
+// images point them under /tmp/appsec-scanner, where an emptyDir or a tmpfs
+// arrives empty on a read-only root filesystem.
+var toolDirKeys = []string{"HOME", "TMPDIR"}
+
+// ensureToolDirs creates the absolute HOME and TMPDIR of the tool's
+// environment (0700, the parents as needed) before the tool starts. It is
+// best effort: a directory it cannot create is left to the tool, which may
+// never use it (a CI runner's HOME, say), and reports its own error if it does.
+func ensureToolDirs(env map[string]string) {
+	for _, k := range toolDirKeys {
+		if dir := env[k]; dir != "" && filepath.IsAbs(dir) {
+			_ = os.MkdirAll(dir, 0o700)
+		}
+	}
 }
 
 // toolEnv keeps the base keys and the adapter's own keys, never CYBEDEFEND_*.

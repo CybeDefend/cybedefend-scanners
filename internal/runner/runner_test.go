@@ -223,3 +223,41 @@ func TestRunForwardsDeclaredKeysOnly(t *testing.T) {
 		t.Fatalf("the tool's environment = %q, want %q", got, want)
 	}
 }
+
+// An emptyDir or a tmpfs mounted at /tmp/appsec-scanner arrives empty: the
+// HOME and TMPDIR the images point under it must exist before the tool runs.
+func TestRunCreatesHomeAndTmpdirBeforeTheTool(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "appsec-scanner")
+	home := filepath.Join(base, "home")
+	tmp := filepath.Join(base, "tmp")
+	dump := filepath.Join(t.TempDir(), "env.txt")
+	a := &fakeAdapter{flags: []string{"--env-dump", dump}, sarif: minimalSARIF(t)}
+	env := map[string]string{"PATH": "/usr/bin:/bin", "HOME": home, "TMPDIR": tmp}
+	if _, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, env); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, d := range []string{home, tmp} {
+		info, err := os.Stat(d)
+		if err != nil || !info.IsDir() {
+			t.Fatalf("%s was not created: %v", d, err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o700 {
+			t.Errorf("%s has mode %o, want 700", d, perm)
+		}
+	}
+}
+
+// A relative HOME or TMPDIR names no place the runner should create.
+func TestRunCreatesOnlyAbsoluteHomeAndTmpdir(t *testing.T) {
+	dir := t.TempDir()
+	a := &fakeAdapter{sarif: minimalSARIF(t)}
+	env := map[string]string{"PATH": "/usr/bin:/bin", "HOME": "relhome", "TMPDIR": "reltmp"}
+	if _, err := Run(context.Background(), a, dir, outPath(t), 10*time.Second, env); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, d := range []string{"relhome", "reltmp"} {
+		if _, err := os.Stat(filepath.Join(dir, d)); err == nil {
+			t.Errorf("a relative %s was created in the source directory", d)
+		}
+	}
+}

@@ -7,7 +7,7 @@ around it is Apache-2.0.
 | Image | Tool | Version | Licence | Source | Release asset (sha256) |
 |---|---|---|---|---|---|
 | `appsec-scanners-opengrep` | Opengrep | v1.33.1 | LGPL-2.1 | https://github.com/opengrep/opengrep | `https://github.com/opengrep/opengrep/releases/download/v1.33.1/opengrep_manylinux_x86` (`46e8133cc490f9f50518061590ce2f6be5a08afaeda034471c0ceda4b3899808`), `opengrep_manylinux_aarch64` (`d1433f63a90b8bc0b6ad4b498a13b372b856ce9a754a43484ba4920fe2d76dcf`) |
-| `appsec-scanners-gitleaks` | Gitleaks | 8.30.1 | MIT | https://github.com/gitleaks/gitleaks | image `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` (binary copied) |
+| `appsec-scanners-gitleaks` | Gitleaks | 8.30.1 | MIT | https://github.com/gitleaks/gitleaks | built from source: Go module `github.com/zricethezav/gitleaks/v8@v8.30.1` (`h1:PmEvCfVI7ti9dV3s5aMZUY7sS2GxRvG3yzih7E+cS3w=`, tag commit `83d9cd684c87d95d656c1458ef04895a7f1cbd8e`), Go 1.26.10, five dependencies raised (below) |
 | `appsec-scanners-trivy-config` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied) |
 | `appsec-scanners-zizmor` | zizmor | 1.31.1 | MIT | https://github.com/zizmorcore/zizmor | image `ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9` (used as the final base) |
 | `appsec-scanners-trivy-fs` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied); vulnerability database downloaded at run time |
@@ -23,8 +23,36 @@ source code, and the licence text, are at https://github.com/opengrep/opengrep
 ## Gitleaks
 
 - Used by: `appsec-scanners-gitleaks` (adapter `gitleaks`, import type `secret`).
-- Version: 8.30.1, image `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f`
-  (only `/usr/bin/gitleaks` is copied into our image).
+- Version: 8.30.1, built from source in the image (`images/gitleaks/Dockerfile`):
+  the Go module `github.com/zricethezav/gitleaks/v8@v8.30.1` (tag commit
+  `83d9cd684c87d95d656c1458ef04895a7f1cbd8e`), fetched from the Go module
+  proxy, checked by sum.golang.org and against its go.sum hash
+  `h1:PmEvCfVI7ti9dV3s5aMZUY7sS2GxRvG3yzih7E+cS3w=`, then built with Go
+  1.26.10 as upstream's Dockerfile builds it (`CGO_ENABLED=0`, no build tags,
+  `version.Version=v8.30.1`). The upstream image's binary (Go 1.24.13) is no
+  longer used: a trivy-image scan found 69 known vulnerabilities in it
+  (2026-11-03).
+- Dependencies raised from gitleaks' own `go.mod`, each to the first release
+  fixing what that scan named (`go get` in the build stage):
+
+  | Module | v8.30.1's version | In our build | Why |
+  |---|---|---|---|
+  | `golang.org/x/crypto` | v0.35.0 | v0.56.0 | 19 advisories fixed in 0.43.0 to 0.56.0 |
+  | `golang.org/x/text` | v0.22.0 | v0.41.0 | 2 advisories fixed in 0.39.0 and 0.41.0 |
+  | `golang.org/x/sys` | v0.30.0 | v0.47.0 | CVE-2026-39824 (fixed in 0.44.0); 0.47.0 is what x/crypto v0.56.0 requires |
+  | `github.com/klauspost/compress` | v1.17.11 | v1.18.7 | CVE-2026-63209 |
+  | `github.com/ulikunitz/xz` | v0.5.12 | v0.5.15 | CVE-2025-58058 |
+  | `golang.org/x/sync` | v0.11.0 | v0.22.0 | not flagged: raised by x/crypto v0.56.0's `go.mod` |
+
+  Kept: `github.com/nwaples/rardecode/v2` v2.1.0 (CVE-2025-11579, fixed in
+  v2.2.0, whose API `github.com/mholt/archives` v0.1.2 no longer builds
+  against). Only archive traversal decodes RAR, and gitleaks does none unless
+  `--max-archive-depth` is set, which appsec-scanner never does
+  (`sources/file.go` returns before extraction at depth 0; `Rar.Match` only
+  compares header bytes). Also reported, not fixable by a release:
+  GO-2026-5932, « x/crypto/openpgp is unmaintained », whose only fix is an
+  untagged x/crypto commit (`v0.58.1-0.20261009181718-2f1f834330b2`); gitleaks
+  imports no `golang.org/x/crypto/openpgp` package (`go list -deps`).
 - Licence: MIT, Copyright (c) 2019 Zachary Rice. <https://github.com/gitleaks/gitleaks/blob/v8.30.1/LICENSE>
 - Source: <https://github.com/gitleaks/gitleaks>
 - Checked at 8.30.1 (`gitleaks dir --help`): the `dir` command (aliases `file`,

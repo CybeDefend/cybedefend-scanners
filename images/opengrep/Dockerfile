@@ -1,8 +1,8 @@
 # appsec-scanners-opengrep: Opengrep (LGPL-2.1) with CybeDefend's own rules.
 # Build from the repository root: docker build -f images/opengrep/Dockerfile .
 
-# golang:1.26.0-alpine (multi-arch index)
-FROM golang:1.26.0-alpine@sha256:d4c4845f5d60c6a974c6000ce58ae079328d03ab7f721a0734277e69905473e5 AS build
+# golang:1.26.10-alpine (multi-arch index)
+FROM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
 ARG VERSION=dev
 WORKDIR /build
 COPY go.mod go.sum* ./
@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 
 # The Opengrep release binary, checked against the sha256 GitHub publishes
 # for each asset of https://github.com/opengrep/opengrep/releases/tag/v1.33.1
-FROM golang:1.26.0-alpine@sha256:d4c4845f5d60c6a974c6000ce58ae079328d03ab7f721a0734277e69905473e5 AS opengrep
+FROM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS opengrep
 ARG TARGETARCH
 ARG OPENGREP_VERSION=v1.33.1
 ARG OPENGREP_SHA256_AMD64=46e8133cc490f9f50518061590ce2f6be5a08afaeda034471c0ceda4b3899808
@@ -33,10 +33,22 @@ FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde
 COPY --from=opengrep /out-opengrep /usr/local/bin/opengrep
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
 COPY rules/opengrep /opt/appsec-scanners/rules/opengrep
+# The release binary is a one-file bundle that unpacks itself (244 MB) under
+# XDG_CACHE_HOME, then runs from there. Unpacked once here, root-owned and
+# read-only for uid 65532: a run writes none of it, and a noexec tmpfs at
+# /tmp/appsec-scanner (Docker's --tmpfs default) does not stop it.
+ENV XDG_CACHE_HOME=/opt/appsec-scanners/opengrep-cache
+RUN XDG_CACHE_HOME=/opt/appsec-scanners/opengrep-cache opengrep --version > /dev/null \
+    && chmod -R a+rX,go-w /opt/appsec-scanners/opengrep-cache
 # The default --out (/tmp/appsec-scanner/results.sarif) is written by uid
-# 65532: that empty directory only is handed to it, nothing recursive.
-RUN mkdir -p /tmp/appsec-scanner && chown 65532:65532 /tmp/appsec-scanner
-ENV HOME=/tmp
+# 65532, with the tools' HOME and TMPDIR under it: those three empty
+# directories only are handed to it, nothing recursive.
+RUN mkdir -p /tmp/appsec-scanner/home /tmp/appsec-scanner/tmp && chown 65532:65532 /tmp/appsec-scanner /tmp/appsec-scanner/home /tmp/appsec-scanner/tmp
+WORKDIR /src
+# Tools write their home and temporary files under the default --out
+# directory, the only place a hardened run (--read-only --tmpfs
+# /tmp/appsec-scanner) leaves writable. The image ships both; appsec-scanner
+# creates them again when an empty tmpfs or emptyDir is mounted there.
+ENV HOME=/tmp/appsec-scanner/home TMPDIR=/tmp/appsec-scanner/tmp
 USER 65532:65532
-WORKDIR /tmp
 ENTRYPOINT ["/usr/local/bin/appsec-scanner", "run", "opengrep"]

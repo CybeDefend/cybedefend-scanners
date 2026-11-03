@@ -4,7 +4,7 @@ Thank you for helping. This repository holds `appsec-scanner`, a Go program that
 
 ## Set-up
 
-- **Go 1.26** (the `go` directive of `go.mod` is `1.26.0`; a newer `go` fetches that toolchain by itself).
+- **Go 1.26** (the `go` directive of `go.mod` is `1.26.10`; a newer `go` fetches that toolchain by itself).
 - **Docker** with Buildx, only for the images and the integration tests.
 
 Checks every pull request must pass, from the repository root:

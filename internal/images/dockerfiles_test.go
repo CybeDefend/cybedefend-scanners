@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -244,6 +245,240 @@ func TestImagesGiveTheDefaultOutDirToTheScannerUser(t *testing.T) {
 		}
 		if !owned {
 			t.Errorf("%s: the final stage does not create /tmp/appsec-scanner owned by 65532:65532", path)
+		}
+	}
+}
+
+// minGoPatch is the oldest Go 1.26 patch release a build stage may use. The
+// appsec-scanner binary carries the toolchain's standard library: built with
+// golang:1.26.0, the images shipped every stdlib fix of 1.26.1 to 1.26.10,
+// and trivy-image reported 47 of them in usr/local/bin/appsec-scanner
+// (2026-11-03). Raise it with the golang digests when a patch release lands.
+const minGoPatch = 10
+
+var goImageRe = regexp.MustCompile(`^golang:1\.26\.(\d+)(?:-\S+)?@sha256:`)
+
+func TestBuildStagesUseAPatchedGo(t *testing.T) {
+	var seen int
+	for _, path := range dockerfiles(t) {
+		for _, in := range parse(t, path) {
+			if in.keyword != "FROM" {
+				continue
+			}
+			m := fromRe.FindStringSubmatch(in.args)
+			if m == nil || !strings.HasPrefix(m[1], "golang:") {
+				continue
+			}
+			seen++
+			g := goImageRe.FindStringSubmatch(m[1])
+			if g == nil {
+				t.Errorf("%s:%d: FROM %s is not golang:1.26.<patch>…@sha256:", path, in.line, m[1])
+				continue
+			}
+			if patch, _ := strconv.Atoi(g[1]); patch < minGoPatch {
+				t.Errorf("%s:%d: FROM %s: Go 1.26.%d predates 1.26.%d", path, in.line, m[1], patch, minGoPatch)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no golang build stage found: the check finds nothing")
+	}
+}
+
+// wantToolEnv is where every image points the tools' home and temporary
+// directory: under the default --out directory, the one place a hardened run
+// (--read-only --tmpfs /tmp/appsec-scanner) leaves writable. appsec-scanner
+// creates both before it starts the tool (runner.ensureToolDirs).
+var wantToolEnv = map[string]string{
+	"HOME":   "/tmp/appsec-scanner/home",
+	"TMPDIR": "/tmp/appsec-scanner/tmp",
+}
+
+// finalEnv reads the ENV instructions of the final stage, KEY=VALUE form.
+func finalEnv(t *testing.T, ins []instruction) map[string]string {
+	t.Helper()
+	env := map[string]string{}
+	for _, in := range ins {
+		if in.keyword != "ENV" {
+			continue
+		}
+		for _, kv := range strings.Fields(in.args) {
+			k, v, ok := strings.Cut(kv, "=")
+			if !ok {
+				t.Fatalf("line %d: ENV %q is not KEY=VALUE", in.line, in.args)
+			}
+			env[k] = strings.Trim(v, `"`)
+		}
+	}
+	return env
+}
+
+func TestImagesPointHomeAndTmpdirUnderTheOutDir(t *testing.T) {
+	for _, path := range dockerfiles(t) {
+		ins := parse(t, path)
+		lastFrom := -1
+		for i, in := range ins {
+			if in.keyword == "FROM" {
+				lastFrom = i
+			}
+		}
+		final := ins[lastFrom+1:]
+		env := finalEnv(t, final)
+		for k, want := range wantToolEnv {
+			if env[k] != want {
+				t.Errorf("%s: the final stage's %s is %q, want %q", path, k, env[k], want)
+			}
+		}
+		// A WORKDIR after USER is created owned by uid 65532: a writable
+		// directory outside /tmp/appsec-scanner.
+		var userSeen bool
+		for _, in := range final {
+			switch in.keyword {
+			case "USER":
+				userSeen = true
+			case "WORKDIR":
+				if userSeen {
+					t.Errorf("%s:%d: WORKDIR %s comes after USER", path, in.line, in.args)
+				}
+			}
+		}
+	}
+}
+
+// gitleaksModuleSum is the go.sum hash of github.com/zricethezav/gitleaks/v8
+// v8.30.1, as https://sum.golang.org/lookup/github.com/zricethezav/gitleaks/v8@v8.30.1
+// serves it (commit 83d9cd684c87d95d656c1458ef04895a7f1cbd8e of the tag).
+const gitleaksModuleSum = "h1:PmEvCfVI7ti9dV3s5aMZUY7sS2GxRvG3yzih7E+cS3w="
+
+// The upstream gitleaks image ships a binary built with Go 1.24.13 and
+// modules with known vulnerabilities (69 trivy-image results, 2026-11-03):
+// the image builds it from source with the patched Go of every build stage.
+func TestGitleaksIsBuiltFromVerifiedSource(t *testing.T) {
+	path := filepath.Join(root, "images", "gitleaks", "Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, in := range parse(t, path) {
+		if in.keyword == "FROM" && strings.Contains(in.args, "zricethezav/gitleaks") {
+			t.Errorf("%s:%d: FROM %s: the upstream binary is copied, not built", path, in.line, in.args)
+		}
+	}
+	for _, want := range []string{
+		"go mod download -json",
+		gitleaksModuleSum,
+		"GOTOOLCHAIN=local",
+		"github.com/zricethezav/gitleaks/v8/version.Version=",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("%s does not hold %q", path, want)
+		}
+	}
+}
+
+var (
+	goDirectiveRe = regexp.MustCompile(`(?m)^go\s+(1\.26\.(\d+))\s*$`)
+	goVersionRe   = regexp.MustCompile(`(?m)^\s*go-version:\s*['"]?([^'"\s]+)['"]?\s*$`)
+)
+
+// The tests, the vet and the images build with one Go: go.mod's directive,
+// which every workflow's setup-go names too.
+func TestGoVersionIsTheSameEverywhere(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := goDirectiveRe.FindStringSubmatch(string(data))
+	if m == nil {
+		t.Fatal("go.mod has no go 1.26.<patch> directive")
+	}
+	if patch, _ := strconv.Atoi(m[2]); patch < minGoPatch {
+		t.Errorf("go.mod's go directive %s predates 1.26.%d", m[1], minGoPatch)
+	}
+	workflows, err := filepath.Glob(filepath.Join(root, ".github", "workflows", "*.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seen int
+	for _, w := range workflows {
+		text, err := os.ReadFile(w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range goVersionRe.FindAllStringSubmatch(string(text), -1) {
+			seen++
+			if v[1] != m[1] {
+				t.Errorf("%s: go-version %s, want go.mod's %s", w, v[1], m[1])
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no go-version in .github/workflows: the check finds nothing")
+	}
+}
+
+// opengrepCache is where the image unpacks Opengrep's one-file binary at build
+// time. Unpacked at run time, it lands under HOME (/tmp/appsec-scanner/home):
+// 244 MB per run, and a tmpfs mounted noexec (Docker's default) cannot run it.
+const opengrepCache = "/opt/appsec-scanners/opengrep-cache"
+
+func TestOpengrepIsUnpackedAtBuildTime(t *testing.T) {
+	path := filepath.Join(root, "images", "opengrep", "Dockerfile")
+	ins := parse(t, path)
+	lastFrom := -1
+	for i, in := range ins {
+		if in.keyword == "FROM" {
+			lastFrom = i
+		}
+	}
+	final := ins[lastFrom+1:]
+	if got := finalEnv(t, final)["XDG_CACHE_HOME"]; got != opengrepCache {
+		t.Errorf("the final stage's XDG_CACHE_HOME is %q, want %s", got, opengrepCache)
+	}
+	var unpacked bool
+	for _, in := range final {
+		if in.keyword == "RUN" && strings.Contains(in.args, "XDG_CACHE_HOME="+opengrepCache) && strings.Contains(in.args, "opengrep --version") {
+			unpacked = true
+		}
+		if in.keyword == "USER" && !unpacked {
+			t.Errorf("%s: USER comes before the RUN that unpacks opengrep into %s", path, opengrepCache)
+			return
+		}
+	}
+	if !unpacked {
+		t.Errorf("%s: no RUN unpacks opengrep with XDG_CACHE_HOME=%s", path, opengrepCache)
+	}
+}
+
+// A tool run directly (`--entrypoint opengrep`, no appsec-scanner to create
+// them) still finds its HOME and TMPDIR: the image ships both, owned by uid
+// 65532, under the default --out directory.
+func TestImagesShipHomeAndTmpdir(t *testing.T) {
+	for _, path := range dockerfiles(t) {
+		ins := parse(t, path)
+		lastFrom := -1
+		for i, in := range ins {
+			if in.keyword == "FROM" {
+				lastFrom = i
+			}
+		}
+		var text strings.Builder
+		for _, in := range ins[lastFrom+1:] {
+			if in.keyword == "RUN" || in.keyword == "COPY" {
+				text.WriteString(in.args + "\n")
+			}
+		}
+		// zizmor's image runs no RUN: its build stage prepares the tree it copies.
+		for _, in := range ins[:lastFrom+1] {
+			if in.keyword == "RUN" && strings.Contains(in.args, "/out/tmp/appsec-scanner") {
+				text.WriteString(in.args + "\n")
+			}
+		}
+		for _, d := range []string{wantToolEnv["HOME"], wantToolEnv["TMPDIR"]} {
+			if !strings.Contains(text.String(), d) && !strings.Contains(text.String(), strings.Replace(d, "/tmp/", "/out/tmp/", 1)) {
+				t.Errorf("%s: the image does not create %s", path, d)
+			}
 		}
 	}
 }

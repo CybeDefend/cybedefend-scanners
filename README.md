@@ -23,7 +23,10 @@ the images.
 
 Images are published for `linux/amd64` and `linux/arm64`, tagged with the
 release version without its leading `v` (`:1.2.0`), its major (`:1`) and
-`:latest`. They run as uid 65532. The versions of the tools and their licences
+`:latest`. They run as uid 65532, and on a read-only root filesystem when
+`/tmp/appsec-scanner` is writable (an `emptyDir`, or `--read-only --tmpfs
+/tmp/appsec-scanner:uid=65532,gid=65532`): the tools' `HOME` and `TMPDIR`
+live there. The versions of the tools and their licences
 are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## SCA and container

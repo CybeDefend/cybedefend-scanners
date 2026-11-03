@@ -16,7 +16,7 @@
 # Trivy 0.76.1 (Apache-2.0).
 FROM aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c AS trivy
 
-FROM golang:1.26.0-alpine@sha256:d4c4845f5d60c6a974c6000ce58ae079328d03ab7f721a0734277e69905473e5 AS build
+FROM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
 ARG VERSION=dev
 WORKDIR /build
 COPY go.* ./
@@ -28,10 +28,14 @@ FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4c
 COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
 # The two directories uid 65532 writes: the default --out
-# (/tmp/appsec-scanner/results.sarif) and Trivy's cache. Nothing else is chowned.
-RUN mkdir -p /tmp/appsec-scanner/trivy-cache && chown 65532:65532 /tmp/appsec-scanner /tmp/appsec-scanner/trivy-cache
-USER 65532:65532
-# uid 65532 has no passwd entry: give the tool a writable HOME.
-ENV HOME=/tmp
+# (/tmp/appsec-scanner/results.sarif), Trivy's cache, HOME and TMPDIR.
+# Nothing else is chowned.
+RUN mkdir -p /tmp/appsec-scanner/trivy-cache /tmp/appsec-scanner/home /tmp/appsec-scanner/tmp && chown 65532:65532 /tmp/appsec-scanner /tmp/appsec-scanner/trivy-cache /tmp/appsec-scanner/home /tmp/appsec-scanner/tmp
 WORKDIR /src
+# Tools write their home and temporary files under the default --out
+# directory, the only place a hardened run (--read-only --tmpfs
+# /tmp/appsec-scanner) leaves writable. The image ships both; appsec-scanner
+# creates them again when an empty tmpfs or emptyDir is mounted there.
+ENV HOME=/tmp/appsec-scanner/home TMPDIR=/tmp/appsec-scanner/tmp
+USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/appsec-scanner","run","trivy-image"]

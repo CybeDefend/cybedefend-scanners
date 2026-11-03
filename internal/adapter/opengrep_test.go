@@ -73,7 +73,10 @@ func TestOpengrepIsRegisteredAsSAST(t *testing.T) {
 		t.Fatalf("type = %s, want sast", a.Type())
 	}
 	p, ok := a.(EnvForwarder)
-	if !ok || !reflect.DeepEqual(p.ForwardedEnv(), []string{"OPENGREP_CONFIG"}) {
-		t.Fatal("opengrep does not receive OPENGREP_CONFIG")
+	// XDG_CACHE_HOME names where the image unpacked the one-file binary
+	// (images/opengrep/Dockerfile): without it, opengrep unpacks itself again
+	// under HOME at every run.
+	if !ok || !reflect.DeepEqual(p.ForwardedEnv(), []string{"OPENGREP_CONFIG", "XDG_CACHE_HOME"}) {
+		t.Fatalf("opengrep receives %v, want OPENGREP_CONFIG and XDG_CACHE_HOME", p.ForwardedEnv())
 	}
 }
