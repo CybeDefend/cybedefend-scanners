@@ -1,7 +1,10 @@
-// Package images holds the checks every images/<adapter>/Dockerfile must pass.
+// Package images holds the checks on the image definitions and on the files
+// around them: every images/<adapter>/Dockerfile, and the samples next to
+// them. It has no code of its own.
 package images
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -163,5 +166,45 @@ func TestOpengrepImageBundlesOnlyOurRules(t *testing.T) {
 		if strings.Contains(text, banned) {
 			t.Errorf("the Dockerfile names %q: only our own rules may be bundled", banned)
 		}
+	}
+}
+
+// filesContaining lists the files under dir whose content holds term.
+func filesContaining(t *testing.T, dir, term string) []string {
+	t.Helper()
+	var hits []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(data), term) {
+			hits = append(hits, path)
+		}
+		return nil
+	})
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("walk %s: %v", dir, err)
+	}
+	return hits
+}
+
+// The vulnerable sample workflow of the zizmor adapter must never run here:
+// under .github/workflows/ a pull_request_target trigger would run a fork's
+// code with this repository's secrets.
+func TestNoSampleWorkflowRunsInThisRepository(t *testing.T) {
+	// The check would pass on nothing: make sure it finds the sample's trigger.
+	sample := filepath.Join(root, "testdata", "samples", "cicd-github-actions", ".github", "workflows")
+	if len(filesContaining(t, sample, "pull_request_target")) == 0 {
+		t.Fatalf("no file under %s holds pull_request_target: the check finds nothing", sample)
+	}
+	if hits := filesContaining(t, filepath.Join(root, ".github", "workflows"), "pull_request_target"); len(hits) > 0 {
+		t.Fatalf("pull_request_target found in this repository's workflows: %v", hits)
 	}
 }
