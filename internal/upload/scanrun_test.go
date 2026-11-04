@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -521,5 +522,149 @@ func TestScanRunDoesNotRetryTooLargeOrBadRequestOrTokenRefusal(t *testing.T) {
 				t.Errorf("requests = %d, want 1", calls.Load())
 			}
 		})
+	}
+}
+
+// fakeClock is the clock of the upload deadline tests: it moves only when a
+// wait or an attempt says so, so no real minute passes.
+type fakeClock struct {
+	mu    sync.Mutex
+	now   time.Time
+	waits []time.Duration
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *fakeClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(d)
+}
+
+// useFakeClock replaces the clock and the wait of the upload with a fake clock.
+func useFakeClock(t *testing.T) *fakeClock {
+	t.Helper()
+	clock := &fakeClock{now: time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)}
+	oldNow, oldWait := scanRunNow, scanRunWait
+	scanRunNow = clock.Now
+	scanRunWait = func(ctx context.Context, d time.Duration) error {
+		clock.mu.Lock()
+		clock.waits = append(clock.waits, d)
+		clock.mu.Unlock()
+		clock.advance(d)
+		return ctx.Err()
+	}
+	t.Cleanup(func() { scanRunNow, scanRunWait = oldNow, oldWait })
+	return clock
+}
+
+func TestScanRunUploadDeadlineIsSixMinutes(t *testing.T) {
+	if ScanRunUploadDeadline != 6*time.Minute {
+		t.Fatalf("ScanRunUploadDeadline = %v, want 6m", ScanRunUploadDeadline)
+	}
+	if !errors.Is(ErrScanRunDeadline, context.DeadlineExceeded) {
+		t.Fatalf("ErrScanRunDeadline must be a context.DeadlineExceeded")
+	}
+}
+
+func TestScanRunUnavailableForeverEndsAtTheDeadline(t *testing.T) {
+	clock := useFakeClock(t)
+	start := clock.Now()
+	var calls atomic.Int32
+	// Each attempt takes 50 s and the instance asks for 60 s more, forever.
+	// An attempt still running at the deadline is cut there (the real
+	// context does it; the fake clock stops at the deadline).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		clock.advance(min(50*time.Second, start.Add(ScanRunUploadDeadline).Sub(clock.Now())))
+		answerRetryAfter(w, http.StatusServiceUnavailable, "IMPORT_UNAVAILABLE", "60")
+	}))
+	defer srv.Close()
+
+	err := scanRunClient(srv).SubmitScanRun(context.Background(), "s1", []byte(`{}`))
+	if !errors.Is(err, ErrScanRunDeadline) {
+		t.Fatalf("SubmitScanRun = %v, want ErrScanRunDeadline", err)
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		t.Errorf("the deadline error must not carry the last refusal: %v", err)
+	}
+	var total time.Duration
+	for _, w := range clock.waits {
+		total += w
+	}
+	if total > ScanRunUploadDeadline {
+		t.Errorf("waited %v in all, more than the %v deadline", total, ScanRunUploadDeadline)
+	}
+	if elapsed := clock.Now().Sub(start); elapsed > ScanRunUploadDeadline {
+		t.Errorf("the upload phase took %v, more than the %v deadline", elapsed, ScanRunUploadDeadline)
+	}
+	if calls.Load() < 2 {
+		t.Errorf("requests = %d, want the retries to run until the deadline", calls.Load())
+	}
+}
+
+func TestScanRunNoAttemptStartsPastTheDeadline(t *testing.T) {
+	clock := useFakeClock(t)
+	start := clock.Now()
+	var latest atomic.Int64
+	// Short Retry-After, slow attempts: only the deadline can stop the retries
+	// before the retry count does.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if d := clock.Now().Sub(start); int64(d) > latest.Load() {
+			latest.Store(int64(d))
+		}
+		clock.advance(2 * time.Minute)
+		answerRetryAfter(w, http.StatusServiceUnavailable, "IMPORT_UNAVAILABLE", "1")
+	}))
+	defer srv.Close()
+
+	err := scanRunClient(srv).SubmitScanRun(context.Background(), "s1", []byte(`{}`))
+	if !errors.Is(err, ErrScanRunDeadline) {
+		t.Fatalf("SubmitScanRun = %v, want ErrScanRunDeadline", err)
+	}
+	if time.Duration(latest.Load()) >= ScanRunUploadDeadline {
+		t.Errorf("an attempt started %v after the start, at or past the deadline", time.Duration(latest.Load()))
+	}
+}
+
+func TestScanRunAHungAttemptIsCutByTheDeadline(t *testing.T) {
+	old := ScanRunUploadDeadline
+	ScanRunUploadDeadline = 200 * time.Millisecond
+	t.Cleanup(func() { ScanRunUploadDeadline = old })
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	start := time.Now()
+	err := scanRunClient(srv).SubmitScanRun(context.Background(), "s1", []byte(`{}`))
+	if !errors.Is(err, ErrScanRunDeadline) {
+		t.Fatalf("SubmitScanRun = %v, want ErrScanRunDeadline", err)
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("a hung attempt held the upload %v", took)
+	}
+}
+
+func TestScanRunStoppedRunIsNotTheDeadline(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+	err := scanRunClient(srv).SubmitScanRun(ctx, "s1", []byte(`{}`))
+	if !errors.Is(err, context.Canceled) || errors.Is(err, ErrScanRunDeadline) {
+		t.Fatalf("SubmitScanRun = %v, want context.Canceled", err)
 	}
 }

@@ -391,3 +391,13 @@ func TestScanRunTokenSentenceDoesNotSayUsed(t *testing.T) {
 		t.Errorf("sentence = %q", s)
 	}
 }
+
+func TestScanRunPastTheUploadDeadlineExits3Interrupted(t *testing.T) {
+	code, sentence := scanRunOutcome(upload.ErrScanRunDeadline)
+	if code != 3 {
+		t.Errorf("exit %d, want 3", code)
+	}
+	if sentence != "the results upload was interrupted." {
+		t.Errorf("sentence = %q", sentence)
+	}
+}

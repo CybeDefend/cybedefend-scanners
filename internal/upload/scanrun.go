@@ -41,6 +41,19 @@ const (
 	ScanRunMaxTotalWait = 5 * time.Minute
 )
 
+// ScanRunUploadDeadline bounds the whole upload phase of a scan run: every
+// attempt and every wait between them, Retry-After included. The pod's time
+// budget counts on it. A variable so that a test can shorten it.
+var ScanRunUploadDeadline = 6 * time.Minute
+
+// ErrScanRunDeadline is returned when the upload phase ran into
+// ScanRunUploadDeadline. It is a context.DeadlineExceeded, and never carries
+// the last refusal: the runner reports the upload as interrupted.
+var ErrScanRunDeadline = fmt.Errorf("the results upload ran past its deadline: %w", context.DeadlineExceeded)
+
+// scanRunNow is the clock of the upload deadline; tests replace it.
+var scanRunNow = time.Now
+
 // scanRunWait waits d, or until ctx is done; tests replace it.
 var scanRunWait = func(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
@@ -63,7 +76,10 @@ var scanRunWait = func(ctx context.Context, d time.Duration) error {
 // ScanRunMaxThrottledRetries times. Before a retry of an answer with a
 // Retry-After (in seconds), the wait is that value when it is longer than the
 // scheduled delay, ScanRunMaxRetryAfter at most; all waits together stay
-// within ScanRunMaxTotalWait. 202 is a success, and so is 409
+// within ScanRunMaxTotalWait. The whole phase, attempts and waits, ends
+// within ScanRunUploadDeadline: an attempt still running then is cut, and a
+// wait that would reach it is not started; either way the error is
+// ErrScanRunDeadline. 202 is a success, and so is 409
 // SCAN_RESULTS_ALREADY_SUBMITTED: a retry of an upload whose answer was lost.
 // 400 SCAN_PROTOCOL_UNSUPPORTED is ErrProtocolRefused, 401 is
 // ErrScanTokenRefused, any other answer an *APIError (413 and 400 are never
@@ -84,11 +100,27 @@ func (c *Client) SubmitScanRun(ctx context.Context, scanID string, sarif []byte)
 		hc = &http.Client{Timeout: DefaultTimeout}
 	}
 
+	parent := ctx
+	deadline := scanRunNow().Add(ScanRunUploadDeadline)
+	ctx, cancel := context.WithTimeout(parent, ScanRunUploadDeadline)
+	defer cancel()
+	// pastDeadline turns an error caused by the phase's own deadline into
+	// ErrScanRunDeadline; a stop of the run itself keeps its own error.
+	pastDeadline := func(err error) error {
+		if parent.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+			return ErrScanRunDeadline
+		}
+		return err
+	}
+
 	var waited time.Duration
 	for attempt := 0; ; attempt++ {
+		if !scanRunNow().Before(deadline) {
+			return ErrScanRunDeadline
+		}
 		retry, err := c.submitOnce(ctx, hc, endpoint, contentType, body)
 		if !retry {
-			return err
+			return pastDeadline(err)
 		}
 		var apiErr *APIError
 		throttled := errors.As(err, &apiErr) && apiErr.throttled()
@@ -111,9 +143,13 @@ func (c *Client) SubmitScanRun(ctx context.Context, scanID string, sarif []byte)
 		if wait <= 0 {
 			return err
 		}
+		// A retry that could only start at or past the deadline is not waited for.
+		if wait >= deadline.Sub(scanRunNow()) {
+			return ErrScanRunDeadline
+		}
 		waited += wait
 		if werr := scanRunWait(ctx, wait); werr != nil {
-			return werr
+			return pastDeadline(werr)
 		}
 	}
 }
