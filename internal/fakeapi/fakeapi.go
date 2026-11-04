@@ -7,6 +7,14 @@
 // was given, 400 IMPORT_INVALID_REQUEST when the multipart body holds no file
 // part, and 202 {"scanId":"fake-<n>"} otherwise. Any path that ends with the
 // import route is accepted, so an API URL with a prefix (« /api ») works.
+//
+// It also serves the route a scanner pod of a Community cluster submits to,
+// POST <api>/scan-runs/<scanId>/results (bearer: the same token, header
+// X-CybeDefend-Scan-Protocol: 1, one part « file »): 202 {"accepted":true},
+// then 409 SCAN_RESULTS_ALREADY_SUBMITTED for that scan, 401
+// SCAN_TOKEN_INVALID, 400 SCAN_PROTOCOL_UNSUPPORTED or IMPORT_UNSUPPORTED_FILE;
+// and, once SetArchive was called, the archive of the scan at GET
+// <any prefix>/archive.zip, whatever its query.
 package fakeapi
 
 import (
@@ -34,6 +42,9 @@ type Upload struct {
 	ProjectID, Type, Branch, Format, Image, Filename, Authorization, UserAgent string
 	Fields                                                                     []string
 	Body                                                                       []byte
+	// ScanID and Protocol are set for a scan-run upload only.
+	ScanID   string `json:",omitempty"`
+	Protocol string `json:",omitempty"`
 }
 
 // Server records the uploads it accepts.
@@ -41,8 +52,10 @@ type Server struct {
 	token string
 	srv   *httptest.Server
 
-	mu      sync.Mutex
-	uploads []Upload
+	mu        sync.Mutex
+	uploads   []Upload
+	archive   []byte
+	submitted map[string]bool
 }
 
 const (
@@ -55,6 +68,12 @@ const (
 
 // importRoute matches the import route, behind any prefix.
 var importRoute = regexp.MustCompile(`^(?:/.*)?/project/([^/]+)/scan/import/start$`)
+
+// scanRunRoute matches the results route of a scan run, behind any prefix.
+var scanRunRoute = regexp.MustCompile(`^(?:/.*)?/scan-runs/([^/]+)/results$`)
+
+// archiveRoute matches the archive download, behind any prefix.
+var archiveRoute = regexp.MustCompile(`^(?:/.*)?/archive\.zip$`)
 
 // New starts a server on a random loopback port.
 func New(token string) *Server {
@@ -92,6 +111,16 @@ func (s *Server) Uploads() []Upload {
 	return append([]Upload(nil), s.uploads...)
 }
 
+// SetArchive sets the zip served at /archive.zip.
+func (s *Server) SetArchive(data []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.archive = append([]byte(nil), data...)
+}
+
+// ArchiveURL is the URL of the archive, with a query standing in for a signature.
+func (s *Server) ArchiveURL() string { return s.srv.URL + "/archive.zip?X-Amz-Signature=fake" }
+
 // Close stops the server.
 func (s *Server) Close() { s.srv.Close() }
 
@@ -114,6 +143,14 @@ func (s *Server) Dump(w io.Writer) error {
 }
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && archiveRoute.MatchString(r.URL.Path) {
+		s.serveArchive(w)
+		return
+	}
+	if m := scanRunRoute.FindStringSubmatch(r.URL.Path); r.Method == http.MethodPost && m != nil {
+		s.serveScanRun(w, r, m[1])
+		return
+	}
 	m := importRoute.FindStringSubmatch(r.URL.Path)
 	if r.Method != http.MethodPost || m == nil {
 		answer(w, http.StatusNotFound, `{"statusCode":404,"error":"Not Found","message":"Cannot `+jsonSafe(r.Method)+` this route"}`)
@@ -137,6 +174,61 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	n := len(s.uploads)
 	s.mu.Unlock()
 	answer(w, http.StatusAccepted, fmt.Sprintf(`{"scanId":"fake-%d"}`, n))
+}
+
+func (s *Server) serveArchive(w http.ResponseWriter) {
+	s.mu.Lock()
+	data := s.archive
+	s.mu.Unlock()
+	if data == nil {
+		answer(w, http.StatusNotFound, `{"statusCode":404,"error":"Not Found"}`)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Length", fmt.Sprint(len(data)))
+	_, _ = w.Write(data)
+}
+
+// serveScanRun answers a results upload as the route does, in its order:
+// token, protocol, already submitted, file.
+func (s *Server) serveScanRun(w http.ResponseWriter, r *http.Request, scanID string) {
+	got := r.Header.Get("Authorization")
+	if s.token == "" || subtle.ConstantTimeCompare([]byte(got), []byte("Bearer "+s.token)) != 1 {
+		answer(w, http.StatusUnauthorized, `{"statusCode":401,"error":"Unauthorized","code":"SCAN_TOKEN_INVALID"}`)
+		return
+	}
+	protocol := r.Header.Get("X-CybeDefend-Scan-Protocol")
+	if protocol != "1" {
+		answer(w, http.StatusBadRequest, `{"statusCode":400,"error":"Bad Request","code":"SCAN_PROTOCOL_UNSUPPORTED"}`)
+		return
+	}
+	s.mu.Lock()
+	done := s.submitted[scanID]
+	s.mu.Unlock()
+	if done {
+		answer(w, http.StatusConflict, `{"statusCode":409,"error":"Conflict","code":"SCAN_RESULTS_ALREADY_SUBMITTED"}`)
+		return
+	}
+	u, err := readUpload(w, r)
+	if err != nil {
+		answer(w, http.StatusBadRequest, `{"statusCode":400,"error":"Bad Request","code":"IMPORT_UNSUPPORTED_FILE"}`)
+		return
+	}
+	u.ScanID, u.Protocol = scanID, protocol
+
+	s.mu.Lock()
+	if s.submitted[scanID] {
+		s.mu.Unlock()
+		answer(w, http.StatusConflict, `{"statusCode":409,"error":"Conflict","code":"SCAN_RESULTS_ALREADY_SUBMITTED"}`)
+		return
+	}
+	if s.submitted == nil {
+		s.submitted = map[string]bool{}
+	}
+	s.submitted[scanID] = true
+	s.uploads = append(s.uploads, u)
+	s.mu.Unlock()
+	answer(w, http.StatusAccepted, `{"accepted":true}`)
 }
 
 func answer(w http.ResponseWriter, status int, body string) {

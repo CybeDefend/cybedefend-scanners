@@ -1,7 +1,10 @@
 // Command fake-api serves internal/fakeapi on a fixed address, for the
 // action's self-test (.github/workflows/action-self-test.yml).
 //
-//	FAKE_API_TOKEN=<token> [FAKE_API_ADDR=127.0.0.1:8080] [FAKE_API_DUMP=<file>] fake-api
+//	FAKE_API_TOKEN=<token> [FAKE_API_ADDR=127.0.0.1:8080] [FAKE_API_DUMP=<file>] [FAKE_API_ARCHIVE=<zip>] fake-api
+//
+// With FAKE_API_ARCHIVE, the zip is served at <url>/archive.zip, the archive
+// URL of a scan run (--scan-run).
 //
 // It accepts uploads whose bearer is FAKE_API_TOKEN and, on SIGTERM or
 // SIGINT, writes them as a JSON array to FAKE_API_DUMP, then exits. The token
@@ -43,6 +46,15 @@ func run(ctx context.Context, getenv func(string) string, ready chan<- string, s
 	if addr == "" {
 		addr = defaultAddr
 	}
+	var archive []byte
+	if p := getenv("FAKE_API_ARCHIVE"); p != "" {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			logf("read FAKE_API_ARCHIVE: %v", err)
+			return 2
+		}
+		archive = data
+	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		logf("listen on %s: %v", addr, err)
@@ -50,6 +62,9 @@ func run(ctx context.Context, getenv func(string) string, ready chan<- string, s
 	}
 	s := fakeapi.NewOn(token, ln)
 	defer s.Close()
+	if archive != nil {
+		s.SetArchive(archive)
+	}
 	logf("listening on %s", s.URL())
 	if ready != nil {
 		ready <- s.URL()

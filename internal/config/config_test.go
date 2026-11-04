@@ -224,3 +224,120 @@ func TestImageFromFlagOrEnv(t *testing.T) {
 		t.Errorf("Image = %q, ImageArchive = %q, want both empty", c.Image, c.ImageArchive)
 	}
 }
+
+// scanRunEnv is the environment a scanner pod receives.
+func scanRunEnv() map[string]string {
+	return map[string]string{
+		"CYBEDEFEND_API_URL":     "https://appsec.example.com/api",
+		"CYBEDEFEND_SCAN_ID":     "6f1c2a9e-1b2c-4d3e-8f00-000000000001",
+		"CYBEDEFEND_SCAN_TOKEN":  "cdst_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbC",
+		"CYBEDEFEND_ARCHIVE_URL": "https://storage.example.com/a.zip?X-Amz-Signature=s3cr3t",
+	}
+}
+
+func TestScanRunReadsItsFourVariables(t *testing.T) {
+	c, err := Load([]string{"opengrep", "--scan-run"}, envOf(scanRunEnv()))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !c.ScanRun || c.Upload {
+		t.Fatalf("ScanRun=%v Upload=%v, want true/false", c.ScanRun, c.Upload)
+	}
+	env := scanRunEnv()
+	if c.APIURL != env["CYBEDEFEND_API_URL"] || c.ScanID != env["CYBEDEFEND_SCAN_ID"] ||
+		c.ScanToken != env["CYBEDEFEND_SCAN_TOKEN"] || c.ArchiveURL != env["CYBEDEFEND_ARCHIVE_URL"] {
+		t.Fatalf("scan-run fields not read: %+v", c)
+	}
+}
+
+func TestScanRunNeedsItsFourVariables(t *testing.T) {
+	for _, key := range []string{"CYBEDEFEND_API_URL", "CYBEDEFEND_SCAN_ID", "CYBEDEFEND_SCAN_TOKEN", "CYBEDEFEND_ARCHIVE_URL"} {
+		t.Run(key, func(t *testing.T) {
+			env := scanRunEnv()
+			delete(env, key)
+			_, err := Load([]string{"opengrep", "--scan-run"}, envOf(env))
+			if err == nil {
+				t.Fatalf("Load accepted a scan run without %s", key)
+			}
+			if !strings.Contains(err.Error(), key) {
+				t.Errorf("error %q does not name %s", err, key)
+			}
+			assertNoSecret(t, err)
+		})
+	}
+	// An empty value counts as unset, and an upload's variables do not stand in.
+	env := scanRunEnv()
+	env["CYBEDEFEND_SCAN_TOKEN"] = ""
+	env["CYBEDEFEND_TOKEN"] = "cdp_personal_token"
+	if _, err := Load([]string{"opengrep", "--scan-run"}, envOf(env)); err == nil {
+		t.Fatal("Load took CYBEDEFEND_TOKEN for the scan token")
+	}
+}
+
+func TestScanRunChecksTheValues(t *testing.T) {
+	cases := map[string]string{
+		"CYBEDEFEND_SCAN_ID":     "not-a-uuid",
+		"CYBEDEFEND_API_URL":     "ftp://appsec.example.com/api",
+		"CYBEDEFEND_ARCHIVE_URL": "file:///etc/passwd?X-Amz-Signature=s3cr3t",
+	}
+	for key, value := range cases {
+		t.Run(key, func(t *testing.T) {
+			env := scanRunEnv()
+			env[key] = value
+			_, err := Load([]string{"opengrep", "--scan-run"}, envOf(env))
+			if err == nil {
+				t.Fatalf("Load accepted %s=%s", key, value)
+			}
+			if !strings.Contains(err.Error(), key) {
+				t.Errorf("error %q does not name %s", err, key)
+			}
+			assertNoSecret(t, err)
+		})
+	}
+}
+
+func TestScanRunAndUploadConflict(t *testing.T) {
+	env := scanRunEnv()
+	env["CYBEDEFEND_PROJECT_ID"] = "p1"
+	env["CYBEDEFEND_TOKEN"] = "cdp_personal_token"
+	env["CYBEDEFEND_BRANCH"] = "main"
+	_, err := Load([]string{"opengrep", "--scan-run", "--upload"}, envOf(env))
+	if err == nil {
+		t.Fatal("Load accepted --scan-run with --upload")
+	}
+	if !strings.Contains(err.Error(), "--scan-run") || !strings.Contains(err.Error(), "--upload") {
+		t.Errorf("error %q does not name both flags", err)
+	}
+}
+
+func TestScanRunRefusedForTrivyImage(t *testing.T) {
+	env := scanRunEnv()
+	env["CYBEDEFEND_IMAGE"] = "alpine:3.20"
+	_, err := Load([]string{"trivy-image", "--scan-run"}, envOf(env))
+	if err == nil {
+		t.Fatal("Load accepted trivy-image --scan-run")
+	}
+	if !strings.Contains(err.Error(), "trivy-image") {
+		t.Errorf("error %q does not name trivy-image", err)
+	}
+}
+
+func TestWithoutScanRunItsVariablesAreIgnored(t *testing.T) {
+	c, err := Load([]string{"opengrep"}, envOf(scanRunEnv()))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.ScanRun || c.ScanID != "" || c.ScanToken != "" || c.ArchiveURL != "" {
+		t.Fatalf("scan-run fields read without --scan-run: %+v", c)
+	}
+}
+
+// assertNoSecret fails when err quotes the scan token or the archive URL.
+func assertNoSecret(t *testing.T, err error) {
+	t.Helper()
+	for _, s := range []string{"cdst_", "s3cr3t", "X-Amz-Signature", "storage.example.com"} {
+		if strings.Contains(err.Error(), s) {
+			t.Errorf("error %q quotes %q", err, s)
+		}
+	}
+}

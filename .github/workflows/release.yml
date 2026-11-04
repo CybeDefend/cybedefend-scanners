@@ -30,15 +30,15 @@ jobs:
       matrix:
         include:
           - adapter: opengrep
-            tests: '^TestOpengrep'
+            tests: '^(TestOpengrep|TestScanRun_Opengrep$)'
           - adapter: gitleaks
-            tests: '^TestGitleaks'
+            tests: '^(TestGitleaks|TestScanRun_Gitleaks$)'
           - adapter: trivy-config
-            tests: '^TestTrivyConfig'
+            tests: '^(TestTrivyConfig|TestScanRun_TrivyConfig$)'
           - adapter: zizmor
-            tests: '^TestZizmor'
+            tests: '^(TestZizmor|TestScanRun_Zizmor$)'
           - adapter: trivy-fs
-            tests: '^TestTrivyFs'
+            tests: '^(TestTrivyFs|TestScanRun_TrivyFs$)'
           - adapter: trivy-image
             tests: '^TestTrivyImage'
     steps:

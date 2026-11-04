@@ -230,3 +230,128 @@ func TestDumpWritesTheUploadsAsJSON(t *testing.T) {
 		t.Error("the dump holds the token")
 	}
 }
+
+const testScanID = "6f1c2a9e-1b2c-4d3e-8f00-000000000001"
+
+func scanRunURL(s *Server) string { return s.URL() + "/api/scan-runs/" + testScanID + "/results" }
+
+// postScanRun sends a results upload with the given protocol header.
+func postScanRun(t *testing.T, url, auth, protocol string, parts []part) *http.Response {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for _, p := range parts {
+		w, err := mw.CreateFormFile(p.name, p.fileName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = w.Write(p.data)
+	}
+	_ = mw.Close()
+	req, err := http.NewRequest(http.MethodPost, url, &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	if protocol != "" {
+		req.Header.Set("X-CybeDefend-Scan-Protocol", protocol)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+// codeOf reads the code of a JSON answer.
+func codeOf(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	defer resp.Body.Close()
+	var body struct {
+		Code string `json:"code"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	return body.Code
+}
+
+func TestFakeAPIRecordsAScanRunUpload(t *testing.T) {
+	s := New(testToken)
+	defer s.Close()
+	sarif := []byte(`{"version":"2.1.0","runs":[]}`)
+
+	resp := postScanRun(t, scanRunURL(s), "Bearer "+testToken, "1", []part{{name: "file", fileName: "results.sarif.gz", data: gzipped(t, sarif)}})
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted || strings.TrimSpace(string(body)) != `{"accepted":true}` {
+		t.Fatalf("answer %d %s, want 202 {\"accepted\":true}", resp.StatusCode, body)
+	}
+	ups := s.Uploads()
+	if len(ups) != 1 {
+		t.Fatalf("%d uploads, want 1", len(ups))
+	}
+	u := ups[0]
+	if u.ScanID != testScanID || u.Protocol != "1" || u.ProjectID != "" || !bytes.Equal(u.Body, sarif) || u.Filename != "results.sarif.gz" {
+		t.Errorf("upload = %+v", u)
+	}
+
+	// A second submit of the same scan is the route's 409.
+	resp = postScanRun(t, scanRunURL(s), "Bearer "+testToken, "1", []part{{name: "file", fileName: "results.sarif", data: sarif}})
+	if resp.StatusCode != http.StatusConflict || codeOf(t, resp) != "SCAN_RESULTS_ALREADY_SUBMITTED" {
+		t.Errorf("second submit answered %d, want 409 SCAN_RESULTS_ALREADY_SUBMITTED", resp.StatusCode)
+	}
+	if len(s.Uploads()) != 1 {
+		t.Error("the second submit was recorded")
+	}
+}
+
+func TestFakeAPIScanRunRefusals(t *testing.T) {
+	s := New(testToken)
+	defer s.Close()
+	file := []part{{name: "file", fileName: "results.sarif", data: []byte(`{}`)}}
+
+	resp := postScanRun(t, scanRunURL(s), "Bearer wrong", "1", file)
+	if resp.StatusCode != http.StatusUnauthorized || codeOf(t, resp) != "SCAN_TOKEN_INVALID" {
+		t.Errorf("wrong token: %d, want 401 SCAN_TOKEN_INVALID", resp.StatusCode)
+	}
+	resp = postScanRun(t, scanRunURL(s), "Bearer "+testToken, "2", file)
+	if resp.StatusCode != http.StatusBadRequest || codeOf(t, resp) != "SCAN_PROTOCOL_UNSUPPORTED" {
+		t.Errorf("protocol 2: %d, want 400 SCAN_PROTOCOL_UNSUPPORTED", resp.StatusCode)
+	}
+	resp = postScanRun(t, scanRunURL(s), "Bearer "+testToken, "1", nil)
+	if resp.StatusCode != http.StatusBadRequest || codeOf(t, resp) != "IMPORT_UNSUPPORTED_FILE" {
+		t.Errorf("no file: %d, want 400 IMPORT_UNSUPPORTED_FILE", resp.StatusCode)
+	}
+	if n := len(s.Uploads()); n != 0 {
+		t.Errorf("%d uploads recorded, want 0", n)
+	}
+}
+
+func TestFakeAPIServesTheArchive(t *testing.T) {
+	s := New(testToken)
+	defer s.Close()
+	resp, err := http.Get(s.URL() + "/archive.zip?X-Amz-Signature=abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("no archive set: %d, want 404", resp.StatusCode)
+	}
+
+	s.SetArchive([]byte("PK-zip-bytes"))
+	resp, err = http.Get(s.URL() + "/archive.zip?X-Amz-Signature=abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || string(body) != "PK-zip-bytes" || resp.Header.Get("Content-Type") != "application/zip" {
+		t.Errorf("archive: %d %q %q", resp.StatusCode, body, resp.Header.Get("Content-Type"))
+	}
+	if got := s.ArchiveURL(); got != s.URL()+"/archive.zip?X-Amz-Signature=fake" {
+		t.Errorf("ArchiveURL = %q", got)
+	}
+}

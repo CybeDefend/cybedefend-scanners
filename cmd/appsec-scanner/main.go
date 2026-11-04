@@ -4,10 +4,17 @@
 //
 //	appsec-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout D]
 //	                   [--image REF] [--image-archive FILE]   (trivy-image only)
+//	appsec-scanner run <adapter> --scan-run [--source DIR] [--out FILE] [--timeout D]
 //	appsec-scanner version
 //
+// --scan-run is the mode of a scanner pod of a CybeDefend Community cluster:
+// it fetches the archive of CYBEDEFEND_ARCHIVE_URL into --source, runs the
+// tool, and submits the SARIF to CYBEDEFEND_API_URL with CYBEDEFEND_SCAN_TOKEN
+// (scan CYBEDEFEND_SCAN_ID, scan protocol 1).
+//
 // Exit codes: 0 done; 2 the tool failed; 3 the SARIF was refused locally or by
-// the API; 4 configuration error.
+// the API; 4 configuration error; 5 the instance refused the scan protocol;
+// 6 the archive could not be fetched.
 package main
 
 import (
@@ -40,7 +47,7 @@ const (
 	exitTool     = 2
 	exitRefused  = 3
 	exitConfig   = 4
-	usageMessage = "usage: appsec-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout DURATION] [--image REF] [--image-archive FILE]\n       appsec-scanner version\n"
+	usageMessage = "usage: appsec-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout DURATION] [--image REF] [--image-archive FILE]\n       appsec-scanner run <adapter> --scan-run [--source DIR] [--out FILE] [--timeout DURATION]\n       appsec-scanner version\n"
 )
 
 // scanIDPattern is what a scan id printed to the terminal may look like.
@@ -86,6 +93,10 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 		return exitConfig
 	}
 	sourceRoot := cfg.Source
+	if _, isImage := a.(adapter.ImageAdapter); isImage && cfg.ScanRun {
+		logf("%s does not support --scan-run: a scan run scans a source archive, not an image", a.Name())
+		return exitConfig
+	}
 	if ia, isImage := a.(adapter.ImageAdapter); isImage {
 		// The reference is never printed: it is checked, then sent as typed.
 		if cfg.Image == "" {
@@ -101,6 +112,19 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 	} else if cfg.Image != "" {
 		logf("CYBEDEFEND_IMAGE is only used by trivy-image")
 		return exitConfig
+	}
+
+	if cfg.ScanRun {
+		logf("fetching the archive of scan %s", cfg.ScanID)
+		root, err := fetchSource(ctx, cfg)
+		if err != nil {
+			logf("the archive could not be fetched: %v", err)
+			return exitFetch
+		}
+		if root != cfg.Source {
+			logf("scanning the archive's top folder")
+		}
+		cfg.Source, sourceRoot = root, root
 	}
 
 	env := toolEnv(a, getenv)
@@ -144,6 +168,13 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 	}
 	logf("wrote %d bytes to %s", buf.Len(), cfg.Out)
 
+	if cfg.ScanRun {
+		code := submitScanRun(ctx, cfg, buf.Bytes(), logf)
+		if code == exitOK {
+			fmt.Fprintln(stdout, "results submitted")
+		}
+		return code
+	}
 	if !cfg.Upload {
 		return exitOK
 	}

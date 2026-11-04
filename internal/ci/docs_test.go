@@ -174,3 +174,28 @@ func TestReadmeNeverPrintsAToken(t *testing.T) {
 		}
 	}
 }
+
+func TestReadmeDocumentsScanRuns(t *testing.T) {
+	readme := string(read(t, "README.md"))
+	i := strings.Index(readme, "## Scan runs (CybeDefend Community cluster)")
+	if i < 0 {
+		t.Fatal("README.md has no section « Scan runs (CybeDefend Community cluster) »")
+	}
+	section := readme[i:]
+	if j := strings.Index(section[3:], "\n## "); j >= 0 {
+		section = section[:j+3]
+	}
+	for _, want := range []string{
+		"--scan-run", "`CYBEDEFEND_API_URL`", "`CYBEDEFEND_SCAN_ID`", "`CYBEDEFEND_SCAN_TOKEN`", "`CYBEDEFEND_ARCHIVE_URL`",
+		"X-CybeDefend-Scan-Protocol: 1", "| 5 |", "| 6 |", "POST <api-url>/scan-runs/<scan id>/results",
+	} {
+		if !strings.Contains(section, want) {
+			t.Errorf("the scan-run section lacks %q", want)
+		}
+	}
+	for _, want := range []string{"| 5 |", "| 6 |"} {
+		if !strings.Contains(readme[strings.Index(readme, "## Exit codes"):], want) {
+			t.Errorf("the exit codes table lacks %q", want)
+		}
+	}
+}

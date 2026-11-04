@@ -154,7 +154,8 @@ CI/CD variables in the project's settings. The branch is `$CI_COMMIT_REF_NAME`;
 | `TRIVY_INSECURE` | Lets `trivy-fs` and `trivy-image` reach a registry or mirror without TLS verification. |
 
 Flags of `appsec-scanner run <adapter>`: `--source` (default `/src`), `--out`
-(default `/tmp/appsec-scanner/results.sarif`), `--upload`, `--timeout`
+(default `/tmp/appsec-scanner/results.sarif`), `--upload`, `--scan-run`
+(below), `--timeout`
 (default `30m`), and `--image` / `--image-archive` for `trivy-image`. There is
 no commit variable: the results are attached to the branch.
 
@@ -171,7 +172,9 @@ SARIF with `cybedefend import --wait` (below).
 | 0 | The tool ran; the SARIF was written, and uploaded with `--upload` |
 | 2 | The tool failed: an exit code outside its success set, no SARIF written, or a timeout |
 | 3 | The SARIF was refused locally (limits, invalid JSON) or by the API |
-| 4 | Configuration error: a missing project id, token, branch or API URL with `--upload`; an unknown adapter; `trivy-image` without an image, or an invalid image reference |
+| 4 | Configuration error: a missing project id, token, branch or API URL with `--upload`; an unknown adapter; `trivy-image` without an image, or an invalid image reference; `--scan-run` without its four variables, with `--upload`, or on `trivy-image` |
+| 5 | `--scan-run` only: the instance refused the scan protocol (`SCAN_PROTOCOL_UNSUPPORTED`) |
+| 6 | `--scan-run` only: the archive of the scan could not be fetched or unpacked |
 
 A tool that exits non-zero only because it found something (Gitleaks, zizmor)
 counts as a success.
@@ -216,6 +219,50 @@ token, which the images do not do: on Cloud, write the SARIF without
 `--upload` (the action's `upload: false`) and send it with `cybedefend import`,
 which performs the exchange. Cloud accepts the `sast`, `secret`, `iac` and
 `cicd` types.
+
+## Scan runs (CybeDefend Community cluster)
+
+A CybeDefend Community Edition instance connected to a Kubernetes cluster
+starts one pod per scanner and scan, running
+`appsec-scanner run <adapter> --scan-run`. That mode:
+
+1. downloads the scan's source archive from `CYBEDEFEND_ARCHIVE_URL` into
+   `--source` (`/src`), within 2 GiB downloaded, 3 GiB unpacked and 200,000
+   entries; absolute paths and `..` refuse the archive, links are skipped, and
+   the zip is deleted once unpacked. An archive whose only entry is a folder
+   (GitHub and GitLab name it `<repo>-<sha>/`) is scanned from that folder, so
+   the results' paths are relative to the repository;
+2. runs the tool and normalises its SARIF, as without `--scan-run`;
+3. submits the SARIF as `multipart/form-data` (one part `file`) to
+   `POST <api-url>/scan-runs/<scan id>/results`, with
+   `Authorization: Bearer <scan token>` and `X-CybeDefend-Scan-Protocol: 1`.
+
+| Variable | Meaning |
+|---|---|
+| `CYBEDEFEND_API_URL` | The instance's API URL, `https://<host>/api`. |
+| `CYBEDEFEND_SCAN_ID` | The scan, a UUID. |
+| `CYBEDEFEND_SCAN_TOKEN` | The token of this pod's upload, spent by one submission. Never printed, never given to the tool. |
+| `CYBEDEFEND_ARCHIVE_URL` | The signed URL of the source archive. Never printed, nor its query. |
+
+The instance sets all four; the pod receives the token and the archive URL from
+a Secret. `--scan-run` cannot be combined with `--upload`, and `trivy-image`
+refuses it. The download connects within 30 s and ends within 15 minutes.
+
+A `409 SCAN_RESULTS_ALREADY_SUBMITTED` counts as done: it answers a retry of a
+submission whose answer was lost. Network errors and 5xx are retried 3 times
+(1 s, 5 s, 15 s); a `429` (the route's per-address limit) or a
+`503 IMPORT_UNAVAILABLE` 6 times, waiting what `Retry-After` asks (60 s at most
+per wait, 5 minutes in all). `401 SCAN_TOKEN_INVALID`, `413` and `400` are not
+retried.
+
+| Outcome | Exit code |
+|---|---|
+| Results submitted (`202`), or already submitted (`409`) | 0 |
+| The tool failed | 2 |
+| The SARIF refused locally, or the submission refused (`SCAN_TOKEN_INVALID`, `IMPORT_*`, after the retries) | 3 |
+| A missing or invalid variable | 4 |
+| `SCAN_PROTOCOL_UNSUPPORTED`: the image is older or newer than the instance speaks; set `CYBEDEFEND_SCANNER_IMAGE_TAG` to a compatible version | 5 |
+| The archive could not be fetched (HTTP status, timeout, limits, unsafe entry) | 6 |
 
 ## Bring your own tool
 

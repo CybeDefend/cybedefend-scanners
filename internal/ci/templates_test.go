@@ -551,6 +551,15 @@ func TestReleaseWorkflow(t *testing.T) {
 		if entry["tests"] == "" {
 			t.Errorf("matrix entry %s names no integration tests", entry["adapter"])
 		}
+		// A released image is proven in the mode a Community cluster runs it.
+		if scanRun, ok := scanRunTests[entry["adapter"]]; ok {
+			re, err := regexp.Compile(entry["tests"])
+			if err != nil {
+				t.Errorf("matrix entry %s: tests %q is not a regexp: %v", entry["adapter"], entry["tests"], err)
+			} else if !re.MatchString(scanRun) {
+				t.Errorf("matrix entry %s does not run %s", entry["adapter"], scanRun)
+			}
+		}
 	}
 	sort.Strings(got)
 	var want []string
@@ -705,4 +714,13 @@ func TestReleaseWorkflow(t *testing.T) {
 			}
 		}
 	}
+}
+
+// scanRunTests is the --scan-run integration test of each adapter that supports it.
+var scanRunTests = map[string]string{
+	"opengrep":     "TestScanRun_Opengrep",
+	"gitleaks":     "TestScanRun_Gitleaks",
+	"trivy-config": "TestScanRun_TrivyConfig",
+	"zizmor":       "TestScanRun_Zizmor",
+	"trivy-fs":     "TestScanRun_TrivyFs",
 }

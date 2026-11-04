@@ -374,3 +374,152 @@ func TestScanRunNeverPrintsToken(t *testing.T) {
 		}
 	}
 }
+
+// recordWaits replaces the wait between attempts with one that returns at
+// once and records what was asked.
+func recordWaits(t *testing.T) *[]time.Duration {
+	t.Helper()
+	var waits []time.Duration
+	old := scanRunWait
+	scanRunWait = func(ctx context.Context, d time.Duration) error {
+		waits = append(waits, d)
+		return ctx.Err()
+	}
+	t.Cleanup(func() { scanRunWait = old })
+	return &waits
+}
+
+// answerRetryAfter writes a refusal with a Retry-After header.
+func answerRetryAfter(w http.ResponseWriter, status int, code, retryAfter string) {
+	if retryAfter != "" {
+		w.Header().Set("Retry-After", retryAfter)
+	}
+	answer(w, status, code)
+}
+
+func TestScanRunHonoursRetryAfterOn429(t *testing.T) {
+	waits := recordWaits(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			answerRetryAfter(w, http.StatusTooManyRequests, "RATE_LIMITED", "7")
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	if err := scanRunClient(srv).SubmitScanRun(context.Background(), "s1", []byte(`{}`)); err != nil {
+		t.Fatalf("SubmitScanRun = %v, want nil", err)
+	}
+	if len(*waits) != 1 || (*waits)[0] != 7*time.Second {
+		t.Fatalf("waits = %v, want [7s] (the Retry-After)", *waits)
+	}
+}
+
+func TestScanRunRetryAfterNeverShortensTheDelayAndIsCapped(t *testing.T) {
+	waits := recordWaits(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		switch calls.Add(1) {
+		case 1:
+			answerRetryAfter(w, http.StatusTooManyRequests, "RATE_LIMITED", "0")
+		case 2:
+			answerRetryAfter(w, http.StatusTooManyRequests, "RATE_LIMITED", "86400")
+		default:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	}))
+	defer srv.Close()
+
+	if err := scanRunClient(srv).SubmitScanRun(context.Background(), "s1", []byte(`{}`)); err != nil {
+		t.Fatalf("SubmitScanRun = %v, want nil", err)
+	}
+	want := []time.Duration{time.Second, ScanRunMaxRetryAfter}
+	if len(*waits) != 2 || (*waits)[0] != want[0] || (*waits)[1] != want[1] {
+		t.Fatalf("waits = %v, want %v", *waits, want)
+	}
+}
+
+func TestScanRunRetries503ImportUnavailableLikeA429(t *testing.T) {
+	waits := recordWaits(t)
+	for _, tc := range []struct {
+		status int
+		code   string
+	}{
+		{http.StatusServiceUnavailable, "IMPORT_UNAVAILABLE"},
+		{http.StatusTooManyRequests, "RATE_LIMITED"},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			*waits = nil
+			var calls atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				calls.Add(1)
+				answerRetryAfter(w, tc.status, tc.code, "1")
+			}))
+			defer srv.Close()
+
+			err := scanRunClient(srv).SubmitScanRun(context.Background(), "s1", []byte(`{}`))
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) || apiErr.Code != tc.code {
+				t.Fatalf("SubmitScanRun = %v, want the last %s", err, tc.code)
+			}
+			if got, want := int(calls.Load()), 1+ScanRunMaxThrottledRetries; got != want {
+				t.Errorf("requests = %d, want %d (one try and %d retries)", got, want, ScanRunMaxThrottledRetries)
+			}
+		})
+	}
+}
+
+func TestScanRunTotalWaitIsCapped(t *testing.T) {
+	waits := recordWaits(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		answerRetryAfter(w, http.StatusTooManyRequests, "RATE_LIMITED", "60")
+	}))
+	defer srv.Close()
+
+	err := scanRunClient(srv).SubmitScanRun(context.Background(), "s1", []byte(`{}`))
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusTooManyRequests {
+		t.Fatalf("SubmitScanRun = %v, want the last 429", err)
+	}
+	var total time.Duration
+	for _, w := range *waits {
+		total += w
+	}
+	if total > ScanRunMaxTotalWait {
+		t.Errorf("waited %v in all, more than %v", total, ScanRunMaxTotalWait)
+	}
+	if total != ScanRunMaxTotalWait {
+		t.Errorf("waited %v in all, want the whole budget %v", total, ScanRunMaxTotalWait)
+	}
+}
+
+func TestScanRunDoesNotRetryTooLargeOrBadRequestOrTokenRefusal(t *testing.T) {
+	recordWaits(t)
+	for _, tc := range []struct {
+		status int
+		code   string
+	}{
+		{http.StatusRequestEntityTooLarge, "IMPORT_UPLOAD_TOO_LARGE"},
+		{http.StatusBadRequest, "IMPORT_UNSUPPORTED_FILE"},
+		{http.StatusUnauthorized, "SCAN_TOKEN_INVALID"},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			var calls atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				calls.Add(1)
+				answerRetryAfter(w, tc.status, tc.code, "1")
+			}))
+			defer srv.Close()
+			if err := scanRunClient(srv).SubmitScanRun(context.Background(), "s1", []byte(`{}`)); err == nil {
+				t.Fatal("SubmitScanRun = nil, want a refusal")
+			}
+			if calls.Load() != 1 {
+				t.Errorf("requests = %d, want 1", calls.Load())
+			}
+		})
+	}
+}

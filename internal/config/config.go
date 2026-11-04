@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -31,7 +32,25 @@ type Config struct {
 	// `docker save` tar Trivy reads instead of pulling it (--image-archive,
 	// else IMAGE_ARCHIVE).
 	Image, ImageArchive string
+	// ScanRun is the mode of a scanner pod of a CybeDefend Community
+	// cluster (--scan-run): the source is fetched from ArchiveURL into
+	// Source, and the SARIF goes to POST <APIURL>/scan-runs/<ScanID>/results
+	// with ScanToken. ScanToken and ArchiveURL are credentials: no error
+	// quotes them.
+	ScanRun                       bool
+	ScanID, ScanToken, ArchiveURL string
 }
+
+// Environment of a scan run.
+const (
+	EnvAPIURL     = "CYBEDEFEND_API_URL"
+	EnvScanID     = "CYBEDEFEND_SCAN_ID"
+	EnvScanToken  = "CYBEDEFEND_SCAN_TOKEN"
+	EnvArchiveURL = "CYBEDEFEND_ARCHIVE_URL"
+)
+
+// uuidPattern is the shape of a scan id.
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // branchVariables are read in order; the first non-empty one wins.
 var branchVariables = []string{"CYBEDEFEND_BRANCH", "GITHUB_HEAD_REF", "GITHUB_REF_NAME", "CI_COMMIT_REF_NAME"}
@@ -46,6 +65,7 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 	fs.StringVar(&c.Source, "source", DefaultSource, "directory the tool scans")
 	fs.StringVar(&c.Out, "out", DefaultOut, "where the normalised SARIF is written")
 	fs.BoolVar(&c.Upload, "upload", false, "upload the SARIF to the import API")
+	fs.BoolVar(&c.ScanRun, "scan-run", false, "fetch the archive of a scan run, scan it and submit the SARIF with the scan token")
 	fs.DurationVar(&c.Timeout, "timeout", DefaultTimeout, "how long the tool may run")
 	fs.StringVar(&c.Image, "image", "", "image reference (trivy-image only)")
 	fs.StringVar(&c.ImageArchive, "image-archive", "", "docker save archive of the image (trivy-image only)")
@@ -102,6 +122,10 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 		}
 	}
 
+	if c.ScanRun {
+		return loadScanRun(c, getenv)
+	}
+
 	if c.Upload {
 		var missing []string
 		if c.APIURL == "" {
@@ -137,4 +161,44 @@ func checkAPIURL(raw string) error {
 		return errors.New("CYBEDEFEND_API_URL must not carry credentials: set the token in CYBEDEFEND_TOKEN")
 	}
 	return nil
+}
+
+// loadScanRun reads and checks the four variables of a scan run. Errors name
+// a variable, never its value.
+func loadScanRun(c Config, getenv func(string) string) (Config, error) {
+	if c.Upload {
+		return Config{}, errors.New("--scan-run and --upload cannot be used together")
+	}
+	if c.Adapter == "trivy-image" {
+		return Config{}, errors.New("trivy-image does not support --scan-run: a scan run scans a source archive, not an image")
+	}
+	c.APIURL = strings.TrimSpace(getenv(EnvAPIURL))
+	c.ScanID = strings.TrimSpace(getenv(EnvScanID))
+	c.ScanToken = strings.TrimSpace(getenv(EnvScanToken))
+	c.ArchiveURL = strings.TrimSpace(getenv(EnvArchiveURL))
+	// The upload's variables are not the scan run's.
+	c.ProjectID, c.Token, c.Branch = "", "", ""
+
+	var missing []string
+	for _, kv := range []struct{ key, value string }{
+		{EnvAPIURL, c.APIURL}, {EnvScanID, c.ScanID}, {EnvScanToken, c.ScanToken}, {EnvArchiveURL, c.ArchiveURL},
+	} {
+		if kv.value == "" {
+			missing = append(missing, kv.key)
+		}
+	}
+	if len(missing) > 0 {
+		return Config{}, fmt.Errorf("--scan-run needs %s", strings.Join(missing, ", "))
+	}
+	if !uuidPattern.MatchString(c.ScanID) {
+		return Config{}, errors.New(EnvScanID + " must be a UUID")
+	}
+	if err := checkAPIURL(c.APIURL); err != nil {
+		return Config{}, err
+	}
+	u, err := url.Parse(c.ArchiveURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return Config{}, errors.New(EnvArchiveURL + " must be an http:// or https:// URL")
+	}
+	return c, nil
 }

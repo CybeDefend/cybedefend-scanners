@@ -91,3 +91,52 @@ func TestRunDumpsTheUploadsWhenStopped(t *testing.T) {
 		t.Error("the token was written to the dump or the log")
 	}
 }
+
+func TestRunServesTheArchiveOfFAKE_API_ARCHIVE(t *testing.T) {
+	zipPath := filepath.Join(t.TempDir(), "source.zip")
+	if err := os.WriteFile(zipPath, []byte("PK-zip-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	ready := make(chan string, 1)
+	done := make(chan int, 1)
+	var stderr bytes.Buffer
+	go func() {
+		done <- run(ctx, env(map[string]string{
+			"FAKE_API_TOKEN":   "test-token",
+			"FAKE_API_ADDR":    "127.0.0.1:0",
+			"FAKE_API_ARCHIVE": zipPath,
+		}), ready, &stderr)
+	}()
+	var url string
+	select {
+	case url = <-ready:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the fake API did not start")
+	}
+	resp, err := http.Get(url + "/archive.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body bytes.Buffer
+	_, _ = body.ReadFrom(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || body.String() != "PK-zip-bytes" {
+		t.Errorf("archive: %d %q", resp.StatusCode, body.String())
+	}
+	stop()
+	<-done
+}
+
+func TestRunRefusesAnUnreadableArchive(t *testing.T) {
+	var stderr bytes.Buffer
+	code := run(context.Background(), env(map[string]string{
+		"FAKE_API_TOKEN":   "test-token",
+		"FAKE_API_ADDR":    "127.0.0.1:0",
+		"FAKE_API_ARCHIVE": filepath.Join(t.TempDir(), "missing.zip"),
+	}), nil, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "FAKE_API_ARCHIVE") {
+		t.Errorf("exit %d, stderr %s", code, stderr.String())
+	}
+}
