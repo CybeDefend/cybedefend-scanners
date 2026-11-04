@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -48,9 +49,12 @@ func fetchSource(ctx context.Context, cfg config.Config) (string, error) {
 	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
 		return "", fmt.Errorf("create the directory of --out: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, fetchDeadline)
+	fetchCtx, cancel := context.WithTimeout(ctx, fetchDeadline)
 	defer cancel()
-	if err := archive.Fetch(ctx, fetchClient(), cfg.ArchiveURL, tmpDir, cfg.Source); err != nil {
+	if err := archive.Fetch(fetchCtx, fetchClient(), cfg.ArchiveURL, tmpDir, cfg.Source); err != nil {
+		if ctx.Err() != nil {
+			return "", errRunStopped
+		}
 		return "", err
 	}
 	entries, err := os.ReadDir(cfg.Source)
@@ -72,16 +76,14 @@ const (
 // scanRunSentences are the fixed sentences of the results route's refusals,
 // by code. They speak of a scan run, never of the import or its tokens.
 var scanRunSentences = map[string]string{
-	"SCAN_TOKEN_INVALID":             "the instance refused the scan token: it was already used, it expired, or its scan is no longer running.",
-	"IMPORT_UPLOAD_TOO_LARGE":        "the results are larger than the instance accepts (50 MB, gzipped).",
-	"IMPORT_INVALID_SARIF":           "the instance found the SARIF invalid.",
-	"IMPORT_UNSUPPORTED_FILE":        "the instance refused the results file (.sarif, .json or .sarif.gz).",
-	"IMPORT_BUSY":                    "the instance is busy importing other results; still busy after the retries.",
-	"IMPORT_STORAGE_UNAVAILABLE":     "the instance's file storage is unavailable; still unavailable after the retries.",
-	"IMPORT_UNAVAILABLE":             "the instance could not start the import; still unavailable after the retries.",
-	"RATE_LIMITED":                   "the instance's rate limit was reached; still limited after the retries.",
-	"SCAN_PROTOCOL_UNSUPPORTED":      "the instance does not speak this image's scan protocol (version 1).",
-	"SCAN_RESULTS_ALREADY_SUBMITTED": "the results of this scanner were already submitted.",
+	"SCAN_TOKEN_INVALID":         "the instance refused the scan token: it expired, or its scan is no longer running.",
+	"IMPORT_UPLOAD_TOO_LARGE":    "the results are larger than the instance accepts (50 MB, gzipped).",
+	"IMPORT_INVALID_SARIF":       "the instance found the SARIF invalid.",
+	"IMPORT_UNSUPPORTED_FILE":    "the instance refused the results file (.sarif, .json or .sarif.gz).",
+	"IMPORT_BUSY":                "the instance is busy importing other results; still busy after the retries.",
+	"IMPORT_STORAGE_UNAVAILABLE": "the instance's file storage is unavailable; still unavailable after the retries.",
+	"IMPORT_UNAVAILABLE":         "the instance could not start the import; still unavailable after the retries.",
+	"RATE_LIMITED":               "the instance's rate limit was reached; still limited after the retries.",
 }
 
 // scanRunOutcome maps an error of SubmitScanRun to an exit code and a fixed
@@ -91,7 +93,7 @@ func scanRunOutcome(err error) (int, string) {
 	var apiErr *upload.APIError
 	switch {
 	case errors.Is(err, upload.ErrProtocolRefused):
-		return exitProtocol, "SCAN_PROTOCOL_UNSUPPORTED: " + scanRunSentences["SCAN_PROTOCOL_UNSUPPORTED"] +
+		return exitProtocol, "SCAN_PROTOCOL_UNSUPPORTED: the instance does not speak this image's scan protocol (version 1)." +
 			" Set CYBEDEFEND_SCANNER_IMAGE_TAG to a version the instance supports."
 	case errors.Is(err, upload.ErrScanTokenRefused):
 		return exitRefused, "SCAN_TOKEN_INVALID: " + scanRunSentences["SCAN_TOKEN_INVALID"]
@@ -110,11 +112,25 @@ func scanRunOutcome(err error) (int, string) {
 		return exitRefused, fmt.Sprintf("the instance refused the results (HTTP %d).", apiErr.Status)
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return exitRefused, "the results upload was interrupted."
-	default:
-		// A transport error: its text names the endpoint, so it is not printed.
+	case isTransport(err):
+		// Its text names the endpoint, so it is not printed.
 		return exitRefused, "the results upload could not reach the instance, even after the retries."
+	default:
+		// A local failure (encoding the SARIF, building the request): nothing was sent.
+		return exitRefused, "the results could not be prepared for the upload; nothing was sent."
 	}
 }
+
+// isTransport reports an error of the HTTP exchange itself.
+func isTransport(err error) bool {
+	var urlErr *url.Error
+	var netErr net.Error
+	return errors.As(err, &urlErr) || errors.As(err, &netErr)
+}
+
+// errRunStopped is returned by fetchSource when the run itself was stopped
+// (SIGTERM, the pod deleted) during the fetch: not a fetch failure.
+var errRunStopped = errors.New("the scan run was stopped")
 
 // submitScanRun sends the SARIF to the results route of the scan run.
 func submitScanRun(ctx context.Context, cfg config.Config, sarif []byte, logf func(string, ...any)) int {

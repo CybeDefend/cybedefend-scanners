@@ -117,6 +117,10 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 	if cfg.ScanRun {
 		logf("fetching the archive of scan %s", cfg.ScanID)
 		root, err := fetchSource(ctx, cfg)
+		if errors.Is(err, errRunStopped) {
+			logf("the scan run was stopped while the archive was being fetched")
+			return exitRefused
+		}
 		if err != nil {
 			logf("the archive could not be fetched: %v", err)
 			return exitFetch

@@ -230,8 +230,9 @@ starts one pod per scanner and scan, running
    `--source` (`/src`), within 2 GiB downloaded, 3 GiB unpacked and 200,000
    entries; absolute paths and `..` refuse the archive, links are skipped, and
    the zip is deleted once unpacked. An archive whose only entry is a folder
-   (GitHub and GitLab name it `<repo>-<sha>/`) is scanned from that folder, so
-   the results' paths are relative to the repository;
+   (GitHub and GitLab name it `<repo>-<sha>/`) is scanned from inside that
+   folder, so the results' paths are relative to the repository: they
+   do not carry that folder's name. A ZIP with several top-level entries is scanned as is;
 2. runs the tool and normalises its SARIF, as without `--scan-run`;
 3. submits the SARIF as `multipart/form-data` (one part `file`) to
    `POST <api-url>/scan-runs/<scan id>/results`, with

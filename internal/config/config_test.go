@@ -341,3 +341,18 @@ func assertNoSecret(t *testing.T, err error) {
 		}
 	}
 }
+
+func TestScanRunAPIURLWithCredentialsNeverSpeaksOfPersonalTokens(t *testing.T) {
+	env := scanRunEnv()
+	env["CYBEDEFEND_API_URL"] = "https://user:pass@appsec.example.com/api"
+	_, err := Load([]string{"opengrep", "--scan-run"}, envOf(env))
+	if err == nil {
+		t.Fatal("Load accepted an API URL with credentials")
+	}
+	if !strings.Contains(err.Error(), "CYBEDEFEND_API_URL") || !strings.Contains(err.Error(), "credentials") {
+		t.Errorf("error %q", err)
+	}
+	if strings.Contains(err.Error(), "CYBEDEFEND_TOKEN") || strings.Contains(err.Error(), "pass") {
+		t.Errorf("error %q names the personal token or quotes the URL", err)
+	}
+}

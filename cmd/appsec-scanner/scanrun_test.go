@@ -3,9 +3,13 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +19,7 @@ import (
 
 	"github.com/cybedefend/cybedefend-scanners/internal/adapter"
 	"github.com/cybedefend/cybedefend-scanners/internal/fakeapi"
+	"github.com/cybedefend/cybedefend-scanners/internal/upload"
 )
 
 const (
@@ -294,10 +299,15 @@ func TestScanRunNeverLogsURLOrToken(t *testing.T) {
 	archive := sourceZip(t, map[string]string{"a.py": "x"})
 	srv, _ := results(t, archive, 202, `{}`)
 	archiveURL := srv.URL + "/archive.zip?" + archiveSecret
-	for _, adapterName := range []string{"test-sast", "test-broken"} {
+	for _, tc := range []struct {
+		adapter string
+		code    int
+	}{{"test-sast", 0}, {"test-broken", 2}} {
 		src, out := scanRunDirs(t)
 		var stdout, stderr bytes.Buffer
-		run([]string{"run", adapterName, "--scan-run", "--source", src, "--out", out}, scanRunEnv(srv.URL, archiveURL), &stdout, &stderr)
+		if code := run([]string{"run", tc.adapter, "--scan-run", "--source", src, "--out", out}, scanRunEnv(srv.URL, archiveURL), &stdout, &stderr); code != tc.code {
+			t.Errorf("%s: exit %d, want %d\nstderr: %s", tc.adapter, code, tc.code, stderr.String())
+		}
 		assertNoCredential(t, archiveURL, stdout.String(), stderr.String())
 	}
 	// A configuration error.
@@ -324,5 +334,60 @@ func TestScanRunConfigurationErrorsExit4(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"run", "test-sast", "--scan-run"}, func(string) string { return "" }, &stdout, &stderr); code != 4 {
 		t.Errorf("no variables: exit %d, want 4", code)
+	}
+}
+
+func TestScanRunStoppedDuringTheFetchExits3(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1000000")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		close(started)
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	defer srv.Close()
+	defer close(release)
+	archiveURL := srv.URL + "/archive.zip?" + archiveSecret
+	src, out := scanRunDirs(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-started
+		cancel() // SIGTERM: the pod is being stopped.
+	}()
+	var stdout, stderr bytes.Buffer
+	code := runAdapter(ctx, []string{"test-sast", "--scan-run", "--source", src, "--out", out}, scanRunEnv(srv.URL, archiveURL), &stdout, &stderr)
+	if code != 3 {
+		t.Fatalf("exit %d, want 3\nstderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "the scan run was stopped") || strings.Contains(stderr.String(), "could not be fetched") {
+		t.Errorf("stderr = %s", stderr.String())
+	}
+	assertNoCredential(t, archiveURL, stdout.String(), stderr.String())
+}
+
+func TestScanRunOutcomeTellsALocalFailureFromATransportOne(t *testing.T) {
+	code, local := scanRunOutcome(errors.New("write the file part: short write"))
+	if code != 3 || !strings.Contains(local, "the results could not be prepared") || strings.Contains(local, "reach the instance") {
+		t.Errorf("local failure: %d %q", code, local)
+	}
+	transport := fmt.Errorf("send the results request: %w", &url.Error{Op: "Post", URL: "http://x/scan-runs/s/results", Err: errors.New("connection refused")})
+	code, sentence := scanRunOutcome(transport)
+	if code != 3 || !strings.Contains(sentence, "could not reach the instance") {
+		t.Errorf("transport failure: %d %q", code, sentence)
+	}
+	if strings.Contains(local+sentence, "http://x") || strings.Contains(local, "short write") {
+		t.Error("an error's text was printed")
+	}
+}
+
+func TestScanRunTokenSentenceDoesNotSayUsed(t *testing.T) {
+	_, s := scanRunOutcome(upload.ErrScanTokenRefused)
+	if strings.Contains(s, "already used") || !strings.HasPrefix(s, "SCAN_TOKEN_INVALID: ") {
+		t.Errorf("sentence = %q", s)
 	}
 }

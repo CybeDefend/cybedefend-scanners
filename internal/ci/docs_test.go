@@ -187,7 +187,7 @@ func TestReadmeDocumentsScanRuns(t *testing.T) {
 	}
 	for _, want := range []string{
 		"--scan-run", "`CYBEDEFEND_API_URL`", "`CYBEDEFEND_SCAN_ID`", "`CYBEDEFEND_SCAN_TOKEN`", "`CYBEDEFEND_ARCHIVE_URL`",
-		"X-CybeDefend-Scan-Protocol: 1", "| 5 |", "| 6 |", "POST <api-url>/scan-runs/<scan id>/results",
+		"X-CybeDefend-Scan-Protocol: 1", "do not carry that folder's name", "| 5 |", "| 6 |", "POST <api-url>/scan-runs/<scan id>/results",
 	} {
 		if !strings.Contains(section, want) {
 			t.Errorf("the scan-run section lacks %q", want)

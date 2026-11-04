@@ -194,6 +194,10 @@ func loadScanRun(c Config, getenv func(string) string) (Config, error) {
 		return Config{}, errors.New(EnvScanID + " must be a UUID")
 	}
 	if err := checkAPIURL(c.APIURL); err != nil {
+		if u, perr := url.Parse(c.APIURL); perr == nil && u.User != nil {
+			// The upload mode's sentence names the personal token: not this mode's.
+			return Config{}, errors.New(EnvAPIURL + " must not carry credentials: the instance URL is https://<host>/api, and the scan token comes in " + EnvScanToken)
+		}
 		return Config{}, err
 	}
 	u, err := url.Parse(c.ArchiveURL)
