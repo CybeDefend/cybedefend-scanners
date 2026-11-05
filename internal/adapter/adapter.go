@@ -60,6 +60,17 @@ type QuietAdapter interface {
 	NothingToAudit(exitCode int, output []byte) bool
 }
 
+// FallbackAdapter is an adapter that can name, after a failed run, another
+// way to run its tool once more (trivy-fs offline when Maven Central refuses
+// with 429). The runner gives the fallback what is left of the timeout and
+// never falls back twice: a fallback adapter answers false itself.
+type FallbackAdapter interface {
+	Adapter
+	// Fallback returns the adapter to run again and a fixed sentence saying
+	// why (it is logged: it names no package, path or URL), or false.
+	Fallback(exitCode int, output []byte) (alt Adapter, reason string, ok bool)
+}
+
 // ImageAdapter is an adapter that scans a container image rather than the
 // source directory (trivy-image). The command binds it to the image the user
 // named before running it.

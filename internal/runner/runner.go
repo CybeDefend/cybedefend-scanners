@@ -43,6 +43,9 @@ type Result struct {
 	ExitCode int
 	Duration time.Duration
 	Output   []byte
+	// FallbackReason is set when the first run failed and the adapter's
+	// fallback (adapter.FallbackAdapter) ran instead: why, in a fixed sentence.
+	FallbackReason string
 	// NothingToAudit is set when the tool said the source holds nothing it
 	// audits (adapter.QuietAdapter): SARIF is then an empty run of the tool.
 	NothingToAudit bool
@@ -53,7 +56,37 @@ type Result struct {
 // (adapter.EnvForwarder) found in env, never a CYBEDEFEND_* key. An exit
 // code outside the adapter's success set, a timeout or a missing SARIF is an
 // error; the Result is returned with it when the tool ran.
+//
+// When the run fails and the adapter names a fallback for that failure
+// (adapter.FallbackAdapter), the fallback runs once, with what is left of
+// the timeout, and its outcome is the Run's.
 func Run(ctx context.Context, a adapter.Adapter, src, out string, timeout time.Duration, env map[string]string) (*Result, error) {
+	start := time.Now()
+	res, err := runOnce(ctx, a, src, out, timeout, env)
+	if err == nil || res == nil || ctx.Err() != nil {
+		return res, err
+	}
+	f, ok := a.(adapter.FallbackAdapter)
+	if !ok {
+		return res, err
+	}
+	alt, reason, ok := f.Fallback(res.ExitCode, res.Output)
+	if !ok {
+		return res, err
+	}
+	left := timeout - time.Since(start)
+	if left <= 0 {
+		return res, err
+	}
+	res, err = runOnce(ctx, alt, src, out, left, env)
+	if res != nil {
+		res.FallbackReason = reason
+	}
+	return res, err
+}
+
+// runOnce is one run of the adapter's tool: see Run.
+func runOnce(ctx context.Context, a adapter.Adapter, src, out string, timeout time.Duration, env map[string]string) (*Result, error) {
 	childEnv := toolEnv(a, env)
 	argv, onStdout := a.Command(src, out, childEnv)
 	if len(argv) == 0 || argv[0] == "" {

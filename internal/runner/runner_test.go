@@ -308,3 +308,51 @@ func TestRunStillFailsOnEveryOtherExitOfAQuietTool(t *testing.T) {
 		}
 	}
 }
+
+// retryAdapter falls back, on its own sentence, to another fake run.
+type retryAdapter struct {
+	fakeAdapter
+	alt *fakeAdapter
+}
+
+func (r *retryAdapter) Fallback(exitCode int, output []byte) (adapter.Adapter, string, bool) {
+	if exitCode == 1 && bytes.Contains(output, []byte("rate limited")) {
+		return r.alt, "the registry refused, ran again offline", true
+	}
+	return nil, "", false
+}
+
+func TestRunFallsBackOnceWhenTheAdapterAsks(t *testing.T) {
+	a := &retryAdapter{
+		fakeAdapter: fakeAdapter{flags: []string{"--code", "1", "--no-write", "--say", "rate limited"}, sarif: minimalSARIF(t)},
+		alt:         &fakeAdapter{sarif: minimalSARIF(t)},
+	}
+	res, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil)
+	if err != nil {
+		t.Fatalf("fallback run: %v", err)
+	}
+	if res.FallbackReason != "the registry refused, ran again offline" || !strings.Contains(string(res.SARIF), `"version"`) {
+		t.Fatalf("result %+v, want the fallback's SARIF and its reason", res)
+	}
+}
+
+func TestRunDoesNotFallBackOnAnotherFailure(t *testing.T) {
+	a := &retryAdapter{
+		fakeAdapter: fakeAdapter{flags: []string{"--code", "1", "--no-write", "--say", "disk full"}, sarif: minimalSARIF(t)},
+		alt:         &fakeAdapter{sarif: minimalSARIF(t)},
+	}
+	if _, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil); err == nil {
+		t.Fatal("no error: the run fell back on a failure the adapter does not name")
+	}
+}
+
+func TestRunReportsTheFallbacksOwnFailure(t *testing.T) {
+	a := &retryAdapter{
+		fakeAdapter: fakeAdapter{flags: []string{"--code", "1", "--no-write", "--say", "rate limited"}, sarif: minimalSARIF(t)},
+		alt:         &fakeAdapter{flags: []string{"--code", "2", "--no-write"}, sarif: minimalSARIF(t)},
+	}
+	_, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil)
+	if err == nil || !strings.Contains(err.Error(), "2") {
+		t.Fatalf("err = %v, want the fallback's exit code", err)
+	}
+}

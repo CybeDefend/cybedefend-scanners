@@ -120,3 +120,50 @@ func TestToolEnvKeysReadsEnvForwarderOnlyAndNeverCYBEDEFEND(t *testing.T) {
 		t.Errorf("EnvForwarder: %q", got)
 	}
 }
+
+// Maven Central limits requests per IP: past it, Trivy cannot fetch a parent
+// POM and fails the whole SCA scan (seen on a local cluster after a few scans
+// of a Spring Boot project). trivy-fs then runs once more with --offline-scan,
+// which calls no Maven repository: fewer versions resolved, never no result.
+func TestTrivyFsFallsBackOfflineOnAMaven429(t *testing.T) {
+	maven429 := []byte("2026-11-05T20:53:25Z\tFATAL\tError\tremote Maven repository returned 429 Too Many Requests for https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-parent/4.1.1/spring-boot-starter-parent-4.1.1.pom. Retry-After: 1580.\n")
+	alt, reason, ok := TrivyFs{}.Fallback(1, maven429)
+	if !ok {
+		t.Fatal("no fallback on Maven's 429")
+	}
+	if reason == "" || strings.Contains(reason, "springframework") {
+		t.Fatalf("reason = %q, want a fixed sentence that names no package", reason)
+	}
+	argv, _ := alt.Command("/src", "/tmp/o.sarif", map[string]string{})
+	offline := 0
+	for _, a := range argv {
+		if a == "--offline-scan" {
+			offline++
+		}
+	}
+	if offline != 1 || argv[len(argv)-1] != "/src" {
+		t.Fatalf("fallback argv = %q, want --offline-scan once and the source last", argv)
+	}
+	if alt.Name() != "trivy-fs" || alt.Type() != TypeSCA {
+		t.Fatalf("fallback is %s/%s, want trivy-fs/sca", alt.Name(), alt.Type())
+	}
+	// the offline run has no fallback of its own: one retry at most
+	if _, _, again := alt.(FallbackAdapter).Fallback(1, maven429); again {
+		t.Fatal("the offline run falls back again")
+	}
+}
+
+func TestTrivyFsKeepsEveryOtherFailure(t *testing.T) {
+	for _, tc := range []struct {
+		code   int
+		output string
+	}{
+		{1, "FATAL\tError\tunable to initialize the scanner: DB error\n"},
+		{1, "FATAL\tError\tremote Maven repository returned 500 Internal Server Error\n"},
+		{0, "remote Maven repository returned 429 Too Many Requests\n"},
+	} {
+		if _, _, ok := (TrivyFs{}).Fallback(tc.code, []byte(tc.output)); ok {
+			t.Fatalf("exit %d with %q falls back", tc.code, tc.output)
+		}
+	}
+}

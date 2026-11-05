@@ -144,6 +144,9 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 		}
 		return exitTool
 	}
+	if res.FallbackReason != "" {
+		logf("%s: %s", a.Name(), res.FallbackReason)
+	}
 	if res.NothingToAudit {
 		logf("%s (%s) found nothing to audit in %s (exit %d): no result", a.Name(), a.Type(), res.Duration.Round(time.Millisecond), res.ExitCode)
 	} else {
