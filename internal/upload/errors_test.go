@@ -48,7 +48,7 @@ func TestCodeRowsOfTheRefusalTable(t *testing.T) {
 		{"IMPORT_INVALID_SARIF", 400, "", "The file is not valid SARIF 2.1.0 JSON."},
 		{"IMPORT_IMAGE_REQUIRED", 400, "", "A container import needs the image reference (--image)."},
 		{"IMPORT_IMAGE_INVALID", 400, "", "The image reference is not valid: registry/name[:tag][@sha256:digest], 255 characters at most."},
-		{"IMPORT_TYPE_NOT_AVAILABLE", 400, "", "SCA and container imports are available only on a Community Edition instance."},
+		{"IMPORT_TYPE_NOT_AVAILABLE", 400, "", "Imports are available only on a Community Edition instance: CybeDefend Cloud does not take them."},
 		{"IMPORT_UPLOAD_TOO_LARGE", 413, "", "The upload is larger than 50 MB even gzipped. Split the scan into smaller SARIF files."},
 		{"IMPORT_BUSY", 503, "15", "The instance is busy; retry in 15 s."},
 		{"IMPORT_STORAGE_UNAVAILABLE", 503, "", "The instance's file storage is unavailable. Retry later or ask the administrator."},

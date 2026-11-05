@@ -1,8 +1,9 @@
 # CybeDefend AppSec scanners
 
 Open-source security scanners, packaged as container images, that send their
-results as SARIF to **CybeDefend AppSec**: a self-hosted Community Edition
-instance or CybeDefend Cloud.
+results as SARIF to a self-hosted **CybeDefend AppSec Community Edition**
+instance. They are for the Community Edition only: CybeDefend Cloud does not
+take imports, of any type.
 
 Each image runs one open-source tool on your code (or on a container image),
 normalises the SARIF it writes (relative paths, no secret snippets, the
@@ -18,8 +19,8 @@ the images.
 | `gitleaks` | `ghcr.io/cybedefend/appsec-scanners-gitleaks` | Gitleaks | `secret` | Scans the files, not the git history; matches are redacted before upload |
 | `trivy-config` | `ghcr.io/cybedefend/appsec-scanners-trivy-config` | Trivy | `iac` | Terraform, Kubernetes, Dockerfile, CloudFormation, Helm; embedded checks, no download |
 | `zizmor` | `ghcr.io/cybedefend/appsec-scanners-zizmor` | zizmor | `cicd` | GitHub Actions workflows; offline unless `GH_TOKEN` is set |
-| `trivy-fs` | `ghcr.io/cybedefend/appsec-scanners-trivy-fs` | Trivy | `sca` | Community Edition only. Downloads Trivy's vulnerability database at each run |
-| `trivy-image` | `ghcr.io/cybedefend/appsec-scanners-trivy-image` | Trivy | `container` | Community Edition only. Downloads Trivy's vulnerability database at each run |
+| `trivy-fs` | `ghcr.io/cybedefend/appsec-scanners-trivy-fs` | Trivy | `sca` | Downloads Trivy's vulnerability database at each run |
+| `trivy-image` | `ghcr.io/cybedefend/appsec-scanners-trivy-image` | Trivy | `container` | Downloads Trivy's vulnerability database at each run |
 
 Images are published for `linux/amd64` and `linux/arm64`, tagged with the
 release version without its leading `v` (`:1.2.0`), its major (`:1`) and
@@ -30,9 +31,6 @@ live there. The versions of the tools and their licences
 are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## SCA and container
-
-`sca` and `container` imports are accepted by a Community Edition instance
-only: CybeDefend Cloud refuses them with `IMPORT_TYPE_NOT_AVAILABLE`.
 
 - **An `sca` import is the branch's whole dependency picture**: the packages it
   does not report are marked resolved. Run `trivy-fs` on the repository root
@@ -56,7 +54,7 @@ only: CybeDefend Cloud refuses them with `IMPORT_TYPE_NOT_AVAILABLE`.
 
 ## Quick start
 
-You need a project on the instance and a personal access token of a user with
+You need a project on the Community Edition instance and a personal access token of a user with
 the `start_scan` permission on it. Keep the token in a secret; never write it in
 a file of the repository.
 
@@ -141,7 +139,7 @@ CI/CD variables in the project's settings. The branch is `$CI_COMMIT_REF_NAME`;
 
 | Variable | Meaning |
 |---|---|
-| `CYBEDEFEND_API_URL` | The instance's API URL. A Community Edition instance serves its API under `/api`: `https://<host>/api`. Required with `--upload`. |
+| `CYBEDEFEND_API_URL` | The Community Edition instance's API URL, `https://<host>/api` (it serves its API under `/api`). Required with `--upload`. |
 | `CYBEDEFEND_PROJECT_ID` | The project the results are imported into. Required with `--upload`. |
 | `CYBEDEFEND_TOKEN` (or `CYBEDEFEND_PAT`) | The personal access token, sent as `Authorization: Bearer <token>`. Never printed, never written to the SARIF, never given to the tool. Required with `--upload`. |
 | `CYBEDEFEND_BRANCH` | The branch the results belong to. Defaults to `GITHUB_HEAD_REF`, then `GITHUB_REF_NAME`, then `CI_COMMIT_REF_NAME`. Required with `--upload`. |
@@ -202,10 +200,10 @@ which is never printed. A known code prints `<CODE>: <sentence>`.
 | `IMPORT_BUSY` (503, `Retry-After: 15`) | `The instance is busy; retry in <Retry-After> s.` |
 | `IMPORT_STORAGE_UNAVAILABLE` (503) | `The instance's file storage is unavailable. Retry later or ask the administrator.` |
 | `IMPORT_UNAVAILABLE` (503) | `The instance could not start processing the import. Retry later or ask the administrator.` |
-| `WRITES_BLOCKED` (403, cloud) | `The organisation cannot start new scans on its current plan.` |
+| `WRITES_BLOCKED` (403, CybeDefend Cloud) | `The organisation cannot start new scans on its current plan.` |
 | `IMPORT_IMAGE_REQUIRED` (400) | `A container import needs the image reference (--image).` |
 | `IMPORT_IMAGE_INVALID` (400) | `The image reference is not valid: registry/name[:tag][@sha256:digest], 255 characters at most.` |
-| `IMPORT_TYPE_NOT_AVAILABLE` (400, cloud) | `SCA and container imports are available only on a Community Edition instance.` |
+| `IMPORT_TYPE_NOT_AVAILABLE` (400, CybeDefend Cloud) | `Imports are available only on a Community Edition instance: CybeDefend Cloud does not take them.` |
 | no known code, 401 | `The token was refused: it may be expired or revoked. Create a new personal access token.` |
 | no known code, 403 | `This token's user lacks the start_scan permission on the project.` |
 | no known code, 404 | `Project not found, or not visible to this token's user.` |
@@ -214,15 +212,12 @@ which is never printed. A known code prints `<CODE>: <sentence>`.
 | no known code, 503 | `The API is unavailable. Retry later or ask the administrator.` |
 | other | `The API refused the import (HTTP <status><, code <code>>).` |
 
-## CybeDefend Cloud
+## Community Edition only
 
-`appsec-scanner --upload` sends the token as a bearer as it is, which is what a
-Community Edition instance expects of its `cdp_…` personal access tokens. A
-CybeDefend Cloud personal access token must first be exchanged for an access
-token, which the images do not do: on Cloud, write the SARIF without
-`--upload` (the action's `upload: false`) and send it with `cybedefend import`,
-which performs the exchange. Cloud accepts the `sast`, `secret`, `iac` and
-`cicd` types.
+`appsec-scanner --upload` sends the instance's `cdp_…` personal access token as
+a bearer, as it is. CybeDefend Cloud does not take imports, of any type: it
+answers `IMPORT_TYPE_NOT_AVAILABLE`. The images, the action and the GitLab
+template upload to a Community Edition instance only.
 
 ## Scan runs (CybeDefend Community cluster)
 
@@ -285,12 +280,13 @@ included, end within 6 minutes.
 
 ## Bring your own tool
 
-Any SARIF 2.1.0 file, from any scanner, can be sent with the
-[CybeDefend CLI](https://github.com/CybeDefend/cybedefend-cli):
+Any SARIF 2.1.0 file, from any scanner, can be sent to a Community Edition
+instance with the [CybeDefend CLI](https://github.com/CybeDefend/cybedefend-cli),
+with the same personal access token in `CYBEDEFEND_TOKEN`:
 
 ```bash
 semgrep scan --sarif --output semgrep.sarif .
-cybedefend import --format sarif --type sast --branch main --project-id <project id> semgrep.sarif
+cybedefend import --api-url https://appsec.example.com/api --format sarif --type sast --branch main --project-id <project id> semgrep.sarif
 ```
 
 `--type` is `sast`, `iac`, `secret`, `cicd`, `sca` or `container`; `--image`

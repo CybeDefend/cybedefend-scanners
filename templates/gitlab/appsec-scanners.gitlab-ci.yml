@@ -1,4 +1,5 @@
-# CybeDefend AppSec scanners for GitLab CI.
+# CybeDefend AppSec scanners for GitLab CI. They upload to a CybeDefend AppSec
+# Community Edition instance only: CybeDefend Cloud does not take imports.
 #
 # Include this file, then extend the hidden jobs you want:
 #
@@ -10,7 +11,7 @@
 #
 # Set these CI/CD variables in the project's settings (Settings > CI/CD >
 # Variables), never in a .gitlab-ci.yml file:
-#   CYBEDEFEND_API_URL     the instance's API URL, such as https://appsec.example.com/api
+#   CYBEDEFEND_API_URL     the Community Edition instance's API URL, such as https://appsec.example.com/api
 #   CYBEDEFEND_PROJECT_ID  the CybeDefend project the results are imported into
 #   CYBEDEFEND_TOKEN       a personal access token with the start_scan
 #                          permission on the project: masked (and protected
@@ -23,8 +24,7 @@
 # branch's whole dependency picture, and every package it does not report is
 # resolved. .cybedefend-container (trivy-image) scans the image named by
 # CYBEDEFEND_IMAGE, which the extending job sets, and pulls it with the job's
-# GitLab registry credentials. sca and container imports are accepted by a
-# Community Edition instance only.
+# GitLab registry credentials.
 
 variables:
   # The scanner image version: a release such as 1.2.0, or its major, 1.

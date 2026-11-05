@@ -34,7 +34,7 @@ var codeSentences = map[string]string{
 	"WRITES_BLOCKED":             "The organisation cannot start new scans on its current plan.",
 	"IMPORT_IMAGE_REQUIRED":      "A container import needs the image reference (--image).",
 	"IMPORT_IMAGE_INVALID":       "The image reference is not valid: registry/name[:tag][@sha256:digest], 255 characters at most.",
-	"IMPORT_TYPE_NOT_AVAILABLE":  "SCA and container imports are available only on a Community Edition instance.",
+	"IMPORT_TYPE_NOT_AVAILABLE":  "Imports are available only on a Community Edition instance: CybeDefend Cloud does not take them.",
 }
 
 // statusSentences is the status part of the table, used when no known code was sent.

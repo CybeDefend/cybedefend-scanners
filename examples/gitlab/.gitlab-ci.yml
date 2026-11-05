@@ -1,4 +1,5 @@
-# Example .gitlab-ci.yml.
+# Example .gitlab-ci.yml. It uploads to a CybeDefend AppSec Community Edition
+# instance (CybeDefend Cloud does not take imports).
 #
 # Set CYBEDEFEND_API_URL, CYBEDEFEND_PROJECT_ID and CYBEDEFEND_TOKEN (masked)
 # in Settings > CI/CD > Variables; never put the token in this file. Replace
@@ -24,7 +25,6 @@ cybedefend-iac:
 cybedefend-cicd:
   extends: .cybedefend-cicd
 
-# sca and container imports need a Community Edition instance.
 cybedefend-sca:
   extends: .cybedefend-sca
 

@@ -1,6 +1,6 @@
 # Contributing to CybeDefend AppSec Scanners
 
-Thank you for helping. This repository holds `appsec-scanner`, a Go program that runs an open-source security tool, normalises the SARIF it writes and uploads it to a CybeDefend instance, plus one container image per tool, a GitHub Action and a GitLab CI template.
+Thank you for helping. This repository holds `appsec-scanner`, a Go program that runs an open-source security tool, normalises the SARIF it writes and uploads it to a CybeDefend AppSec Community Edition instance (CybeDefend Cloud does not take imports), plus one container image per tool, a GitHub Action and a GitLab CI template.
 
 ## Set-up
 

@@ -2,7 +2,8 @@ name: CybeDefend AppSec scanners
 description: >-
   Run one open-source security scanner (Opengrep, Gitleaks, Trivy, zizmor) in
   its container image, normalise its SARIF and upload it to the import route of
-  a CybeDefend instance.
+  a CybeDefend AppSec Community Edition instance. CybeDefend Cloud does not
+  take imports.
 author: CybeDefend
 branding:
   icon: shield
@@ -12,9 +13,7 @@ inputs:
   scanner:
     description: >-
       The scanner to run: opengrep (sast), gitleaks (secret), trivy-config
-      (iac), zizmor (cicd), trivy-fs (sca) or trivy-image (container). sca and
-      container imports are accepted by a Community Edition instance only.
-      zizmor runs its online audits only when the step's env sets GH_TOKEN to
+      (iac), zizmor (cicd), trivy-fs (sca) or trivy-image (container). zizmor runs its online audits only when the step's env sets GH_TOKEN to
       the workflow's github.token.
     required: true
   project-id:
@@ -31,8 +30,8 @@ inputs:
     default: ''
   api-url:
     description: >-
-      The instance's API URL, such as https://appsec.example.com/api (the
-      Community Edition serves its API under /api).
+      The Community Edition instance's API URL, such as
+      https://appsec.example.com/api (it serves its API under /api).
     required: true
   token:
     description: >-

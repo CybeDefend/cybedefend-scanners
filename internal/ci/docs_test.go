@@ -69,12 +69,62 @@ func TestReadmeNamesEveryAdapter(t *testing.T) {
 				t.Errorf("README.md row of %s lacks %s: %s", name, want, row)
 			}
 		}
-		if typ == "sca" || typ == "container" {
-			for _, want := range []string{"Community Edition only", "database"} {
-				if !strings.Contains(row, want) {
-					t.Errorf("README.md row of %s lacks %q: %s", name, want, row)
-				}
+		if (typ == "sca" || typ == "container") && !strings.Contains(row, "database") {
+			t.Errorf("README.md row of %s lacks %q: %s", name, "database", row)
+		}
+	}
+}
+
+// firstParagraph returns the README's text between its title and the first
+// blank line after it.
+func firstParagraph(doc string) string {
+	parts := strings.SplitN(strings.TrimLeft(doc, "\n"), "\n\n", 3)
+	if len(parts) < 2 {
+		return ""
+	}
+	return strings.Join(strings.Fields(parts[1]), " ")
+}
+
+func TestReadmeSaysCommunityEditionOnlyFirst(t *testing.T) {
+	first := firstParagraph(string(read(t, "README.md")))
+	for _, want := range []string{"Community Edition only", "CybeDefend Cloud does not take imports"} {
+		if !strings.Contains(first, want) {
+			t.Errorf("README.md's first paragraph does not say %q: %s", want, first)
+		}
+	}
+}
+
+// cloudAsTarget are phrasings that present CybeDefend Cloud as a place the
+// results can be uploaded to, which it is not.
+var cloudAsTarget = []string{"or CybeDefend Cloud", "Cloud accepts", "on Cloud,", "Cloud refuses them", "## CybeDefend Cloud"}
+
+func TestNoTextPresentsCloudAsAnUploadTarget(t *testing.T) {
+	files := []string{"README.md", "CONTRIBUTING.md", "SECURITY.md", "action.yml", "templates/gitlab/appsec-scanners.gitlab-ci.yml"}
+	for _, dir := range []string{"examples", "rules"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
 			}
+			rel, rerr := filepath.Rel(root, p)
+			files = append(files, rel)
+			return rerr
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range files {
+		text := strings.Join(strings.Fields(string(read(t, f))), " ")
+		for _, bad := range cloudAsTarget {
+			if strings.Contains(text, bad) {
+				t.Errorf("%s says %q: CybeDefend Cloud takes no import", f, bad)
+			}
+		}
+	}
+	for _, f := range []string{"action.yml", "templates/gitlab/appsec-scanners.gitlab-ci.yml", "CONTRIBUTING.md"} {
+		text := strings.Join(strings.Fields(string(read(t, f))), " ")
+		if !strings.Contains(text, "Community Edition instance") {
+			t.Errorf("%s does not say the results go to a Community Edition instance", f)
 		}
 	}
 }

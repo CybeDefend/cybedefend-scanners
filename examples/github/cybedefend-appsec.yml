@@ -1,9 +1,11 @@
-# Example workflow: copy it to .github/workflows/cybedefend-appsec.yml.
+# Example workflow: copy it to .github/workflows/cybedefend-appsec.yml. It
+# uploads to a CybeDefend AppSec Community Edition instance (CybeDefend Cloud
+# does not take imports).
 #
 # Repository settings it reads:
 #   secrets.CYBEDEFEND_TOKEN       a personal access token with the start_scan
 #                                  permission on the project
-#   vars.CYBEDEFEND_API_URL        the instance's API URL, such as https://appsec.example.com/api
+#   vars.CYBEDEFEND_API_URL        the Community Edition instance's API URL, such as https://appsec.example.com/api
 #   vars.CYBEDEFEND_PROJECT_ID     the CybeDefend project
 #
 # Replace @v1 with the full commit sha of the release you use (and set the
@@ -24,7 +26,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # trivy-fs (sca) needs a Community Edition instance.
         scanner: [opengrep, gitleaks, trivy-config, zizmor, trivy-fs]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,7 +42,6 @@ jobs:
           token: ${{ secrets.CYBEDEFEND_TOKEN }}
 
   container:
-    # A container import needs a Community Edition instance.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
