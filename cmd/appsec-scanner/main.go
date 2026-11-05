@@ -144,7 +144,11 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 		}
 		return exitTool
 	}
-	logf("%s (%s) exited %d in %s, %d bytes of SARIF", a.Name(), a.Type(), res.ExitCode, res.Duration.Round(time.Millisecond), len(res.SARIF))
+	if res.NothingToAudit {
+		logf("%s (%s) found nothing to audit in %s (exit %d): no result", a.Name(), a.Type(), res.Duration.Round(time.Millisecond), res.ExitCode)
+	} else {
+		logf("%s (%s) exited %d in %s, %d bytes of SARIF", a.Name(), a.Type(), res.ExitCode, res.Duration.Round(time.Millisecond), len(res.SARIF))
+	}
 
 	log, err := sarif.Parse(bytes.NewReader(res.SARIF))
 	if err != nil {

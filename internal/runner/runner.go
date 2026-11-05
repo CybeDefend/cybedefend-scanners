@@ -4,6 +4,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -42,6 +43,9 @@ type Result struct {
 	ExitCode int
 	Duration time.Duration
 	Output   []byte
+	// NothingToAudit is set when the tool said the source holds nothing it
+	// audits (adapter.QuietAdapter): SARIF is then an empty run of the tool.
+	NothingToAudit bool
 }
 
 // Run runs the adapter's tool on src, writing its SARIF to out. The tool's
@@ -105,6 +109,11 @@ func Run(ctx context.Context, a adapter.Adapter, src, out string, timeout time.D
 		var exitErr *exec.ExitError
 		if !errors.As(runErr, &exitErr) {
 			return res, fmt.Errorf("start %s: %w", a.Name(), runErr)
+		}
+		if q, ok := a.(adapter.QuietAdapter); ok && q.NothingToAudit(res.ExitCode, res.Output) {
+			res.NothingToAudit = true
+			res.SARIF = emptySARIF(a.Name())
+			return res, nil
 		}
 		if res.ExitCode < 0 || !slices.Contains(a.SuccessExitCodes(), res.ExitCode) {
 			return res, fmt.Errorf("%s failed with exit code %d (expected one of %v)", a.Name(), res.ExitCode, a.SuccessExitCodes())
@@ -217,3 +226,10 @@ func (t *tailWriter) Write(p []byte) (int, error) {
 }
 
 func (t *tailWriter) bytes() []byte { return t.buf }
+
+// emptySARIF is one run of the tool with no result, for a tool that had
+// nothing to audit.
+func emptySARIF(tool string) []byte {
+	name, _ := json.Marshal(tool)
+	return []byte(`{"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[{"tool":{"driver":{"name":` + string(name) + `}},"results":[]}]}`)
+}

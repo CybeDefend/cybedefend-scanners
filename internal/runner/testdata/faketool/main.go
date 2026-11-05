@@ -18,6 +18,7 @@ func main() {
 	code := flag.Int("code", 0, "exit code")
 	sleep := flag.Duration("sleep", 0, "sleep before writing")
 	envDump := flag.String("env-dump", "", "file to write the environment to")
+	say := flag.String("say", "", "a line written to stderr before exiting")
 	flag.Parse()
 
 	if *envDump != "" {
@@ -36,6 +37,9 @@ func main() {
 		} else if err := os.WriteFile(*out, data, 0o600); err != nil {
 			os.Exit(92)
 		}
+	}
+	if *say != "" {
+		os.Stderr.WriteString(*say + "\n")
 	}
 	os.Stderr.WriteString("faketool: done\n")
 	os.Exit(*code)

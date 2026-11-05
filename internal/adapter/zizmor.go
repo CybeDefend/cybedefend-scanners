@@ -1,5 +1,7 @@
 package adapter
 
+import "bytes"
+
 // zizmorTokenKey is the one variable zizmor receives: with it, zizmor runs its
 // online audits (it reads the token from its environment, never from argv).
 const zizmorTokenKey = "GH_TOKEN"
@@ -34,3 +36,17 @@ func (Zizmor) SuccessExitCodes() []int { return []int{0} }
 
 // ForwardedEnv implements EnvForwarder.
 func (Zizmor) ForwardedEnv() []string { return []string{zizmorTokenKey} }
+
+// zizmorNoInputsExit and zizmorNoInputs are what zizmor answers for a source
+// with no workflow, action or Dependabot file to audit (zizmor 1.31: « error:
+// no inputs collected », exit 3).
+const zizmorNoInputsExit = 3
+
+var zizmorNoInputs = []byte("no inputs collected")
+
+// NothingToAudit implements QuietAdapter: exit 3 with « no inputs collected »
+// is a repository without GitHub Actions, the common case. Any other exit 3
+// stays a failure.
+func (Zizmor) NothingToAudit(exitCode int, output []byte) bool {
+	return exitCode == zizmorNoInputsExit && bytes.Contains(output, zizmorNoInputs)
+}

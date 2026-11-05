@@ -48,6 +48,18 @@ type Adapter interface {
 	SuccessExitCodes() []int
 }
 
+// QuietAdapter is an adapter whose tool says, by an exit code and its own
+// words, that the source holds nothing it audits (zizmor on a repository
+// without GitHub Actions). The runner then answers an empty SARIF instead of
+// a failure: no input is no finding, not a broken scanner.
+type QuietAdapter interface {
+	Adapter
+	// NothingToAudit reports whether this exit code and the end of the tool's
+	// output mean « nothing to audit ». It must match the tool's own sentence,
+	// never an exit code alone.
+	NothingToAudit(exitCode int, output []byte) bool
+}
+
 // ImageAdapter is an adapter that scans a container image rather than the
 // source directory (trivy-image). The command binds it to the image the user
 // named before running it.

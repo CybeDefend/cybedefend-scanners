@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cybedefend/cybedefend-scanners/internal/adapter"
+	"github.com/cybedefend/cybedefend-scanners/internal/sarif"
 )
 
 var fakeTool string
@@ -258,6 +260,51 @@ func TestRunCreatesOnlyAbsoluteHomeAndTmpdir(t *testing.T) {
 	for _, d := range []string{"relhome", "reltmp"} {
 		if _, err := os.Stat(filepath.Join(dir, d)); err == nil {
 			t.Errorf("a relative %s was created in the source directory", d)
+		}
+	}
+}
+
+// quietAdapter is a tool that says, by exit code 3 and its own sentence, that
+// the source holds nothing it audits (zizmor on a repository without
+// workflows).
+type quietAdapter struct{ fakeAdapter }
+
+func (q *quietAdapter) NothingToAudit(exitCode int, output []byte) bool {
+	return exitCode == 3 && bytes.Contains(output, []byte("nothing to audit here"))
+}
+
+func TestRunTurnsNothingToAuditIntoAnEmptySARIF(t *testing.T) {
+	for _, stdout := range []bool{true, false} {
+		a := &quietAdapter{fakeAdapter{flags: []string{"--code", "3", "--no-write", "--say", "error: nothing to audit here"}, stdout: stdout, sarif: minimalSARIF(t)}}
+		res, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil)
+		if err != nil {
+			t.Fatalf("stdout=%v: %v", stdout, err)
+		}
+		if !res.NothingToAudit || res.ExitCode != 3 {
+			t.Fatalf("stdout=%v: result %+v, want NothingToAudit with exit code 3", stdout, res)
+		}
+		log, err := sarif.Parse(bytes.NewReader(res.SARIF))
+		if err != nil {
+			t.Fatalf("stdout=%v: the empty SARIF does not parse: %v", stdout, err)
+		}
+		if err := sarif.Check(log); err != nil {
+			t.Fatalf("stdout=%v: the empty SARIF is refused: %v", stdout, err)
+		}
+		if len(log.Runs) != 1 || log.Runs[0].Tool.Driver.Name != "fake" || len(log.Runs[0].Results) != 0 {
+			t.Fatalf("stdout=%v: SARIF %s, want one run of fake with no result", stdout, res.SARIF)
+		}
+	}
+}
+
+func TestRunStillFailsOnEveryOtherExitOfAQuietTool(t *testing.T) {
+	cases := [][]string{
+		{"--code", "3", "--no-write"},                                   // the code without the sentence
+		{"--code", "2", "--no-write", "--say", "nothing to audit here"}, // the sentence with another code
+	}
+	for _, flags := range cases {
+		a := &quietAdapter{fakeAdapter{flags: flags, stdout: true, sarif: minimalSARIF(t)}}
+		if _, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil); err == nil {
+			t.Fatalf("flags %v: no error", flags)
 		}
 	}
 }
