@@ -156,7 +156,11 @@ CI/CD variables in the project's settings. The branch is `$CI_COMMIT_REF_NAME`;
 Flags of `appsec-scanner run <adapter>`: `--source` (default `/src`), `--out`
 (default `/tmp/appsec-scanner/results.sarif`), `--upload`, `--scan-run`
 (below), `--timeout`
-(default `30m`), and `--image` / `--image-archive` for `trivy-image`. There is
+(default `30m`), `--image` / `--image-archive` for `trivy-image`, and
+`--sbom-out` (a file) for `trivy-fs`: it also writes a CycloneDX JSON SBOM of
+the source there (every package found, with or without an advisory, its
+licenses and the dependency graph; paths relative to the source). `--upload`
+sends the SARIF only. There is
 no commit variable: the results are attached to the branch.
 
 The upload is `multipart/form-data` to
@@ -238,6 +242,19 @@ starts one pod per scanner and scan, running
    `POST <api-url>/scan-runs/<scan id>/results`, with
    `Authorization: Bearer <scan token>` and `X-CybeDefend-Scan-Protocol: 1`.
 
+`trivy-fs` also sends the source's whole package inventory: one Trivy scan
+writes its JSON report, which `trivy convert` turns into the SARIF and into a
+CycloneDX JSON SBOM (every package with its purl, licenses and the dependency
+graph, paths relative to the repository, the scanned folder named `.`). The
+SBOM goes as a second part, `sbom` (`results.cdx.json`,
+`application/vnd.cyclonedx+json`), with `X-CybeDefend-Scan-Protocol: 2`. When
+the instance answers `400 SCAN_PROTOCOL_UNSUPPORTED` (it predates protocol 2)
+or `400 IMPORT_INVALID_SBOM` (it could not read the SBOM; nothing was stored),
+the same SARIF is sent once more as protocol 1, without the SBOM, and one line
+says the instance did not accept the SBOM. The SBOM never fails the scan: when
+it cannot be produced, is not CycloneDX 1.4 to 1.7, or exceeds 50 MB, one line
+says so and the SARIF goes alone as protocol 1.
+
 | Variable | Meaning |
 |---|---|
 | `CYBEDEFEND_API_URL` | The instance's API URL, `https://<host>/api`. |
@@ -254,7 +271,8 @@ submission whose answer was lost. Network errors and 5xx are retried 3 times
 (1 s, 5 s, 15 s); a `429` (the route's per-address limit) or a
 `503 IMPORT_UNAVAILABLE` 6 times, waiting what `Retry-After` asks (60 s at most
 per wait, 5 minutes in all). `401 SCAN_TOKEN_INVALID`, `413` and `400` are not
-retried.
+retried, except the one protocol 1 resend above. All attempts, that resend
+included, end within 6 minutes.
 
 | Outcome | Exit code |
 |---|---|

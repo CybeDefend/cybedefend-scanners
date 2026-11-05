@@ -10,9 +10,12 @@
 //
 // It also serves the route a scanner pod of a Community cluster submits to,
 // POST <api>/scan-runs/<scanId>/results (bearer: the same token, header
-// X-CybeDefend-Scan-Protocol: 1, one part « file »): 202 {"accepted":true},
-// then 409 SCAN_RESULTS_ALREADY_SUBMITTED for that scan, 401
-// SCAN_TOKEN_INVALID, 400 SCAN_PROTOCOL_UNSUPPORTED or IMPORT_UNSUPPORTED_FILE;
+// X-CybeDefend-Scan-Protocol: 1 with one part « file », or 2 with the part
+// « sbom » after it): 202 {"accepted":true}, then 409
+// SCAN_RESULTS_ALREADY_SUBMITTED for that scan, 401 SCAN_TOKEN_INVALID, 400
+// SCAN_PROTOCOL_UNSUPPORTED (a version SetScanProtocols did not name),
+// IMPORT_INVALID_REQUEST (an SBOM with protocol 1, none with 2),
+// IMPORT_INVALID_SBOM (after RefuseSBOM) or IMPORT_UNSUPPORTED_FILE;
 // and, once SetArchive was called, the archive of the scan at GET
 // <any prefix>/archive.zip, whatever its query.
 package fakeapi
@@ -45,6 +48,9 @@ type Upload struct {
 	// ScanID and Protocol are set for a scan-run upload only.
 	ScanID   string `json:",omitempty"`
 	Protocol string `json:",omitempty"`
+	// SBOM is the part « sbom » of a protocol 2 scan-run upload, as sent.
+	SBOM                          []byte `json:",omitempty"`
+	SBOMFilename, SBOMContentType string `json:",omitempty"`
 }
 
 // Server records the uploads it accepts.
@@ -56,6 +62,53 @@ type Server struct {
 	uploads   []Upload
 	archive   []byte
 	submitted map[string]bool
+	// protocols are the scan protocols accepted, nil for 1 and 2; refused
+	// records each version refused.
+	protocols map[string]bool
+	refused   []string
+	// refuseSBOM answers every SBOM 400 IMPORT_INVALID_SBOM.
+	refuseSBOM bool
+}
+
+// RefuseSBOM makes the results route answer a protocol 2 upload 400
+// IMPORT_INVALID_SBOM, as the instance does for an SBOM it cannot read: it
+// stores nothing, and the scan stays open for a protocol 1 upload.
+func (s *Server) RefuseSBOM() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuseSBOM = true
+}
+
+// SetScanProtocols sets the scan protocols the results route accepts (by
+// default 1 and 2): SetScanProtocols("1") plays an instance older than the SBOM.
+func (s *Server) SetScanProtocols(versions ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.protocols = map[string]bool{}
+	for _, v := range versions {
+		s.protocols[v] = true
+	}
+}
+
+// RefusedProtocols returns the scan protocol of each upload refused with
+// SCAN_PROTOCOL_UNSUPPORTED, oldest first.
+func (s *Server) RefusedProtocols() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.refused...)
+}
+
+func (s *Server) speaks(protocol string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ok := protocol == "1" || protocol == "2"
+	if s.protocols != nil {
+		ok = s.protocols[protocol]
+	}
+	if !ok {
+		s.refused = append(s.refused, protocol)
+	}
+	return ok
 }
 
 const (
@@ -198,7 +251,7 @@ func (s *Server) serveScanRun(w http.ResponseWriter, r *http.Request, scanID str
 		return
 	}
 	protocol := r.Header.Get("X-CybeDefend-Scan-Protocol")
-	if protocol != "1" {
+	if !s.speaks(protocol) {
 		answer(w, http.StatusBadRequest, `{"statusCode":400,"error":"Bad Request","code":"SCAN_PROTOCOL_UNSUPPORTED"}`)
 		return
 	}
@@ -212,6 +265,17 @@ func (s *Server) serveScanRun(w http.ResponseWriter, r *http.Request, scanID str
 	u, err := readUpload(w, r)
 	if err != nil {
 		answer(w, http.StatusBadRequest, `{"statusCode":400,"error":"Bad Request","code":"IMPORT_UNSUPPORTED_FILE"}`)
+		return
+	}
+	if (u.SBOM != nil) != (protocol == "2") {
+		answer(w, http.StatusBadRequest, `{"statusCode":400,"error":"Bad Request","code":"IMPORT_INVALID_REQUEST"}`)
+		return
+	}
+	s.mu.Lock()
+	refuseSBOM := s.refuseSBOM
+	s.mu.Unlock()
+	if u.SBOM != nil && refuseSBOM {
+		answer(w, http.StatusBadRequest, `{"statusCode":400,"error":"Bad Request","code":"IMPORT_INVALID_SBOM"}`)
 		return
 	}
 	u.ScanID, u.Protocol = scanID, protocol
@@ -275,6 +339,19 @@ func readUpload(w http.ResponseWriter, r *http.Request) (Upload, error) {
 			u.Filename = p.FileName()
 			if raw, err = io.ReadAll(p); err != nil {
 				return u, err
+			}
+			continue
+		}
+		if name == "sbom" {
+			if u.SBOM != nil {
+				return u, errors.New("two sbom parts")
+			}
+			u.SBOMFilename, u.SBOMContentType = p.FileName(), p.Header.Get("Content-Type")
+			if u.SBOM, err = io.ReadAll(p); err != nil {
+				return u, err
+			}
+			if u.SBOM == nil {
+				u.SBOM = []byte{}
 			}
 			continue
 		}

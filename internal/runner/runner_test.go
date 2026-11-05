@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/cybedefend/cybedefend-scanners/internal/adapter"
 	"github.com/cybedefend/cybedefend-scanners/internal/sarif"
+	"github.com/cybedefend/cybedefend-scanners/internal/sbom"
 )
 
 var fakeTool string
@@ -354,5 +356,138 @@ func TestRunReportsTheFallbacksOwnFailure(t *testing.T) {
 	_, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil)
 	if err == nil || !strings.Contains(err.Error(), "2") {
 		t.Fatalf("err = %v, want the fallback's exit code", err)
+	}
+}
+
+// convertingAdapter writes a report with faketool, then converts it: the
+// SARIF conversion copies sarifFile to out, the SBOM one sbomFile to sbomPath.
+type convertingAdapter struct {
+	fakeAdapter
+	sarifFlags, sbomFlags []string
+	sbomFile, sbomPath    string
+	noSBOM                bool
+}
+
+func (c *convertingAdapter) Command(src, out string, env map[string]string) ([]string, bool) {
+	return append([]string{fakeTool, "--sarif", c.sarif, "--out", out + ".report"}, c.flags...), false
+}
+
+func (c *convertingAdapter) Conversion(out string) (adapter.Conversion, bool) {
+	conv := adapter.Conversion{
+		Report: out + ".report",
+		SARIF:  append([]string{fakeTool, "--sarif", out + ".report", "--out", out}, c.sarifFlags...),
+	}
+	if !c.noSBOM {
+		conv.SBOM = append([]string{fakeTool, "--sarif", c.sbomFile, "--out", c.sbomPath}, c.sbomFlags...)
+		conv.SBOMPath = c.sbomPath
+	}
+	return conv, true
+}
+
+func writeTemp(t *testing.T, name, body string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func newConverting(t *testing.T) *convertingAdapter {
+	return &convertingAdapter{
+		fakeAdapter: fakeAdapter{sarif: minimalSARIF(t)},
+		sbomFile:    writeTemp(t, "in.cdx.json", `{"bomFormat":"CycloneDX","specVersion":"1.7"}`),
+		sbomPath:    filepath.Join(t.TempDir(), "results.cdx.json"),
+	}
+}
+
+func TestRunConvertsTheReportIntoTheSARIFAndTheSBOM(t *testing.T) {
+	a := newConverting(t)
+	out := outPath(t)
+	res, err := Run(context.Background(), a, t.TempDir(), out, 10*time.Second, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(string(res.SARIF), `"version"`) {
+		t.Fatalf("SARIF = %q", res.SARIF)
+	}
+	if string(res.SBOM) != `{"bomFormat":"CycloneDX","specVersion":"1.7"}` || res.SBOMErr != nil {
+		t.Fatalf("SBOM = %q, err %v", res.SBOM, res.SBOMErr)
+	}
+	if _, err := os.Stat(out + ".report"); !os.IsNotExist(err) {
+		t.Fatalf("the report was left behind: %v", err)
+	}
+}
+
+func TestRunWithoutAnSBOMConversionReadsNoSBOM(t *testing.T) {
+	a := newConverting(t)
+	a.noSBOM = true
+	res, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil)
+	if err != nil || res.SBOM != nil || res.SBOMErr != nil {
+		t.Fatalf("res %+v, err %v", res, err)
+	}
+}
+
+// The SBOM is extra: when its conversion fails, the scan still has its SARIF.
+func TestRunKeepsTheSARIFWhenTheSBOMConversionFails(t *testing.T) {
+	a := newConverting(t)
+	a.sbomFlags = []string{"--code", "3", "--no-write"}
+	res, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.SBOM != nil || res.SBOMErr == nil || !strings.Contains(res.SBOMErr.Error(), "3") {
+		t.Fatalf("SBOM %q, SBOMErr %v: want no SBOM and the exit code", res.SBOM, res.SBOMErr)
+	}
+	if !strings.Contains(string(res.SARIF), `"version"`) {
+		t.Fatalf("SARIF = %q", res.SARIF)
+	}
+}
+
+func TestRunNeverReadsAnSBOMLeftByAnEarlierRun(t *testing.T) {
+	a := newConverting(t)
+	if err := os.WriteFile(a.sbomPath, []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a.sbomFlags = []string{"--no-write"}
+	res, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil)
+	if err != nil || res.SBOM != nil || res.SBOMErr == nil {
+		t.Fatalf("SBOM %q, SBOMErr %v, err %v: want no SBOM", res.SBOM, res.SBOMErr, err)
+	}
+}
+
+func TestRunRefusesAnSBOMAboveTheLimit(t *testing.T) {
+	old := maxSBOMBytes
+	maxSBOMBytes = 10
+	t.Cleanup(func() { maxSBOMBytes = old })
+	res, err := Run(context.Background(), newConverting(t), t.TempDir(), outPath(t), 10*time.Second, nil)
+	if err != nil || res.SBOM != nil || !errors.Is(res.SBOMErr, sbom.ErrTooLarge) {
+		t.Fatalf("SBOM %q, SBOMErr %v, err %v: want ErrTooLarge", res.SBOM, res.SBOMErr, err)
+	}
+}
+
+func TestRunFailsWhenTheSARIFConversionFails(t *testing.T) {
+	a := newConverting(t)
+	a.sarifFlags = []string{"--code", "4", "--no-write"}
+	if _, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil); err == nil || !strings.Contains(err.Error(), "4") {
+		t.Fatalf("err = %v, want the conversion's exit code", err)
+	}
+}
+
+func TestRunFailsWhenTheScanItselfFailsBeforeAnyConversion(t *testing.T) {
+	a := newConverting(t)
+	a.flags = []string{"--code", "1", "--no-write"}
+	res, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil)
+	if err == nil || res == nil || res.ExitCode != 1 {
+		t.Fatalf("res %+v err %v, want the scan's exit 1", res, err)
+	}
+}
+
+func TestRunCreatesTheDirectoryOfTheSBOM(t *testing.T) {
+	a := newConverting(t)
+	a.sbomPath = filepath.Join(t.TempDir(), "deeper", "results.cdx.json")
+	res, err := Run(context.Background(), a, t.TempDir(), outPath(t), 10*time.Second, nil)
+	if err != nil || res.SBOMErr != nil || res.SBOM == nil {
+		t.Fatalf("SBOM %q, SBOMErr %v, err %v", res.SBOM, res.SBOMErr, err)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"net"
@@ -64,6 +65,12 @@ func zipDir(t *testing.T, dir string) []byte {
 // archive and the results route.
 func runScanRun(t *testing.T, adapter, sampleDir, network string) (*fakeapi.Server, string, string) {
 	t.Helper()
+	return runScanRunWith(t, adapter, sampleDir, network, nil)
+}
+
+// runScanRunWith is runScanRun with the fake API set up by setup first.
+func runScanRunWith(t *testing.T, adapter, sampleDir, network string, setup func(*fakeapi.Server)) (*fakeapi.Server, string, string) {
+	t.Helper()
 	image := buildImage(t, adapter)
 	ln, err := net.Listen("tcp", "0.0.0.0:0")
 	if err != nil {
@@ -71,6 +78,9 @@ func runScanRun(t *testing.T, adapter, sampleDir, network string) (*fakeapi.Serv
 	}
 	api := fakeapi.NewOn(scanRunToken, ln)
 	t.Cleanup(api.Close)
+	if setup != nil {
+		setup(api)
+	}
 	api.SetArchive(zipDir(t, sampleDir))
 	base := "http://127.0.0.1:" + portOf(t, ln.Addr())
 	archiveURL := base + "/archive.zip?X-Amz-Signature=integration-signature"
@@ -100,16 +110,22 @@ func runScanRun(t *testing.T, adapter, sampleDir, network string) (*fakeapi.Serv
 	return api, string(out), archiveURL
 }
 
-// assertOneScanRunUpload checks the single upload: the scan, its protocol,
-// at least one result, and paths relative to the repository.
-func assertOneScanRunUpload(t *testing.T, api *fakeapi.Server, out, archiveURL string) {
+// assertOneScanRunUpload checks the single upload: the scan, protocol 1, at
+// least one result, and paths relative to the repository.
+func assertOneScanRunUpload(t *testing.T, api *fakeapi.Server, out, archiveURL string) fakeapi.Upload {
+	t.Helper()
+	return assertOneScanRunUploadAs(t, api, out, archiveURL, "1")
+}
+
+// assertOneScanRunUploadAs is assertOneScanRunUpload with the protocol given.
+func assertOneScanRunUploadAs(t *testing.T, api *fakeapi.Server, out, archiveURL, protocol string) fakeapi.Upload {
 	t.Helper()
 	ups := api.Uploads()
 	if len(ups) != 1 {
 		t.Fatalf("%d uploads, want 1\n%s", len(ups), out)
 	}
 	u := ups[0]
-	if u.ScanID != scanRunScanID || u.Protocol != "1" || u.Authorization != "Bearer "+scanRunToken {
+	if u.ScanID != scanRunScanID || u.Protocol != protocol || u.Authorization != "Bearer "+scanRunToken {
 		t.Errorf("upload scan %q protocol %q", u.ScanID, u.Protocol)
 	}
 	results := sarifResults(t, u.Body)
@@ -129,6 +145,7 @@ func assertOneScanRunUpload(t *testing.T, api *fakeapi.Server, out, archiveURL s
 			t.Errorf("the pod's output quotes %q", s)
 		}
 	}
+	return u
 }
 
 func scanRunSample(t *testing.T, name string) string {
@@ -162,8 +179,98 @@ func TestScanRun_TrivyConfig(t *testing.T) {
 	assertOneScanRunUpload(t, api, out, archiveURL)
 }
 
+// trivy-fs submits, with its SARIF, the CycloneDX SBOM of the same scan:
+// protocol 2, every package with its purl, no path of the pod.
 func TestScanRun_TrivyFs(t *testing.T) {
 	trivyFsSkip(t)
 	api, out, archiveURL := runScanRun(t, "trivy-fs", scanRunSample(t, "sca-npm"), "host")
-	assertOneScanRunUpload(t, api, out, archiveURL)
+	u := assertOneScanRunUploadAs(t, api, out, archiveURL, "2")
+	assertLodashFinding(t, u.Body)
+	if u.SBOMFilename != "results.cdx.json" || u.SBOMContentType != "application/vnd.cyclonedx+json" {
+		t.Errorf("sbom part %q %q", u.SBOMFilename, u.SBOMContentType)
+	}
+	var bom struct {
+		BOMFormat   string `json:"bomFormat"`
+		SpecVersion string `json:"specVersion"`
+		Metadata    struct {
+			Component struct{ Name string } `json:"component"`
+		} `json:"metadata"`
+		Components []struct {
+			Type, Name, Version, Purl string
+			Licenses                  []struct {
+				License struct{ ID string } `json:"license"`
+			} `json:"licenses"`
+		} `json:"components"`
+		Dependencies []struct {
+			Ref       string   `json:"ref"`
+			DependsOn []string `json:"dependsOn"`
+		} `json:"dependencies"`
+	}
+	if err := json.Unmarshal(u.SBOM, &bom); err != nil {
+		t.Fatalf("the SBOM does not parse: %v\n%s", err, out)
+	}
+	if bom.BOMFormat != "CycloneDX" || bom.Metadata.Component.Name != "." {
+		t.Errorf("SBOM %s %s, root %q", bom.BOMFormat, bom.SpecVersion, bom.Metadata.Component.Name)
+	}
+	found := false
+	for _, c := range bom.Components {
+		if c.Purl == "pkg:npm/lodash@4.17.20" && len(c.Licenses) > 0 && c.Licenses[0].License.ID == "MIT" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no lodash 4.17.20 with its MIT license in the SBOM:\n%s", u.SBOM)
+	}
+	edges := 0
+	for _, d := range bom.Dependencies {
+		edges += len(d.DependsOn)
+	}
+	if edges == 0 {
+		t.Errorf("the SBOM has no dependency graph:\n%s", u.SBOM)
+	}
+	for _, leak := range []string{"/src", "/tmp/appsec-scanner", archiveTop} {
+		if strings.Contains(string(u.SBOM), leak) {
+			t.Errorf("the SBOM names %q", leak)
+		}
+	}
+	if !strings.Contains(out, "SBOM: ") || strings.Contains(out, "lodash") {
+		t.Errorf("the pod's output lacks the SBOM count, or names a package:\n%s", out)
+	}
+}
+
+// An instance older than the SBOM refuses protocol 2: the pod sends the same
+// SARIF again, as protocol 1, and says so once.
+func TestScanRun_TrivyFsToAnInstanceWithoutSBOM(t *testing.T) {
+	trivyFsSkip(t)
+	api, out, archiveURL := runScanRunWith(t, "trivy-fs", scanRunSample(t, "sca-npm"), "host", func(s *fakeapi.Server) {
+		s.SetScanProtocols("1")
+	})
+	u := assertOneScanRunUpload(t, api, out, archiveURL)
+	if u.SBOM != nil {
+		t.Errorf("the protocol 1 upload carries an SBOM")
+	}
+	if got := api.RefusedProtocols(); len(got) != 1 || got[0] != "2" {
+		t.Errorf("refused protocols = %q, want [2]", got)
+	}
+	assertLodashFinding(t, u.Body)
+	if strings.Count(out, "the instance did not accept the SBOM (SCAN_PROTOCOL_UNSUPPORTED)") != 1 {
+		t.Errorf("the pod's output lacks the one SBOM line:\n%s", out)
+	}
+}
+
+// The instance refuses the SBOM (IMPORT_INVALID_SBOM): stored nothing, token
+// unspent, so the pod sends the same SARIF alone as protocol 1.
+func TestScanRun_TrivyFsWhenTheInstanceRefusesTheSBOM(t *testing.T) {
+	trivyFsSkip(t)
+	api, out, archiveURL := runScanRunWith(t, "trivy-fs", scanRunSample(t, "sca-npm"), "host", func(s *fakeapi.Server) {
+		s.RefuseSBOM()
+	})
+	u := assertOneScanRunUpload(t, api, out, archiveURL)
+	if u.SBOM != nil {
+		t.Errorf("the protocol 1 upload carries an SBOM")
+	}
+	assertLodashFinding(t, u.Body)
+	if strings.Count(out, "the instance did not accept the SBOM (IMPORT_INVALID_SBOM)") != 1 {
+		t.Errorf("the pod's output lacks the one SBOM line:\n%s", out)
+	}
 }

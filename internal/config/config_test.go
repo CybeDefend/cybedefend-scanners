@@ -356,3 +356,17 @@ func TestScanRunAPIURLWithCredentialsNeverSpeaksOfPersonalTokens(t *testing.T) {
 		t.Errorf("error %q names the personal token or quotes the URL", err)
 	}
 }
+
+func TestSBOMOutIsOptional(t *testing.T) {
+	c, err := Load([]string{"trivy-fs"}, envOf(nil))
+	if err != nil || c.SBOMOut != "" {
+		t.Fatalf("default SBOMOut = %q, err %v; want none", c.SBOMOut, err)
+	}
+	c, err = Load([]string{"trivy-fs", "--sbom-out", "/out/results.cdx.json"}, envOf(nil))
+	if err != nil || c.SBOMOut != "/out/results.cdx.json" {
+		t.Fatalf("SBOMOut = %q, err %v", c.SBOMOut, err)
+	}
+	if _, err := Load([]string{"trivy-fs", "--sbom-out", "/tmp/appsec-scanner/results.sarif"}, envOf(nil)); err == nil {
+		t.Fatal("--sbom-out equal to --out was accepted")
+	}
+}

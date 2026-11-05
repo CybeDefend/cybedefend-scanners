@@ -472,7 +472,7 @@ func TestRunAppliesTheAdaptersSARIFRewriterBeforeUpload(t *testing.T) {
 	if strings.Join(got, ",") != "plain-A,B,C,D" {
 		t.Errorf("uploaded ruleIds = %q, want plain-A,B,C,D", got)
 	}
-	if !strings.Contains(stderr.String(), "rewrote 1 rule ids") {
+	if !strings.Contains(stderr.String(), "rewrote 1 values of the SARIF") {
 		t.Errorf("stderr lacks the rewrite count: %s", stderr.String())
 	}
 }

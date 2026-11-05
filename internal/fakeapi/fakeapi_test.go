@@ -316,9 +316,19 @@ func TestFakeAPIScanRunRefusals(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized || codeOf(t, resp) != "SCAN_TOKEN_INVALID" {
 		t.Errorf("wrong token: %d, want 401 SCAN_TOKEN_INVALID", resp.StatusCode)
 	}
-	resp = postScanRun(t, scanRunURL(s), "Bearer "+testToken, "2", file)
+	resp = postScanRun(t, scanRunURL(s), "Bearer "+testToken, "3", file)
 	if resp.StatusCode != http.StatusBadRequest || codeOf(t, resp) != "SCAN_PROTOCOL_UNSUPPORTED" {
-		t.Errorf("protocol 2: %d, want 400 SCAN_PROTOCOL_UNSUPPORTED", resp.StatusCode)
+		t.Errorf("protocol 3: %d, want 400 SCAN_PROTOCOL_UNSUPPORTED", resp.StatusCode)
+	}
+	// the version says whether the request carries an SBOM
+	resp = postScanRun(t, scanRunURL(s), "Bearer "+testToken, "2", file)
+	if resp.StatusCode != http.StatusBadRequest || codeOf(t, resp) != "IMPORT_INVALID_REQUEST" {
+		t.Errorf("protocol 2 without an SBOM: %d, want 400 IMPORT_INVALID_REQUEST", resp.StatusCode)
+	}
+	withSBOM := append(file, part{name: "sbom", fileName: "results.cdx.json", data: []byte(`{}`)})
+	resp = postScanRun(t, scanRunURL(s), "Bearer "+testToken, "1", withSBOM)
+	if resp.StatusCode != http.StatusBadRequest || codeOf(t, resp) != "IMPORT_INVALID_REQUEST" {
+		t.Errorf("protocol 1 with an SBOM: %d, want 400 IMPORT_INVALID_REQUEST", resp.StatusCode)
 	}
 	resp = postScanRun(t, scanRunURL(s), "Bearer "+testToken, "1", nil)
 	if resp.StatusCode != http.StatusBadRequest || codeOf(t, resp) != "IMPORT_UNSUPPORTED_FILE" {
@@ -353,5 +363,68 @@ func TestFakeAPIServesTheArchive(t *testing.T) {
 	}
 	if got := s.ArchiveURL(); got != s.URL()+"/archive.zip?X-Amz-Signature=fake" {
 		t.Errorf("ArchiveURL = %q", got)
+	}
+}
+
+func TestFakeAPIRecordsTheSBOMOfAProtocol2Upload(t *testing.T) {
+	s := New(testToken)
+	defer s.Close()
+	sarif := []byte(`{"version":"2.1.0","runs":[]}`)
+	sbom := []byte(`{"bomFormat":"CycloneDX","specVersion":"1.7"}`)
+	resp := postScanRun(t, scanRunURL(s), "Bearer "+testToken, "2", []part{
+		{name: "file", fileName: "results.sarif", data: sarif},
+		{name: "sbom", fileName: "results.cdx.json", data: sbom},
+	})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("answer %d, want 202", resp.StatusCode)
+	}
+	ups := s.Uploads()
+	if len(ups) != 1 {
+		t.Fatalf("%d uploads, want 1", len(ups))
+	}
+	u := ups[0]
+	if u.Protocol != "2" || !bytes.Equal(u.Body, sarif) || !bytes.Equal(u.SBOM, sbom) || u.SBOMFilename != "results.cdx.json" || len(u.Fields) != 0 {
+		t.Errorf("upload = %+v", u)
+	}
+}
+
+// An instance older than protocol 2: SetScanProtocols("1").
+func TestFakeAPICanPlayAnInstanceOlderThanProtocol2(t *testing.T) {
+	s := New(testToken)
+	defer s.Close()
+	s.SetScanProtocols("1")
+	resp := postScanRun(t, scanRunURL(s), "Bearer "+testToken, "2", []part{
+		{name: "file", fileName: "results.sarif", data: []byte(`{}`)},
+		{name: "sbom", fileName: "results.cdx.json", data: []byte(`{}`)},
+	})
+	if resp.StatusCode != http.StatusBadRequest || codeOf(t, resp) != "SCAN_PROTOCOL_UNSUPPORTED" {
+		t.Fatalf("protocol 2: %d, want 400 SCAN_PROTOCOL_UNSUPPORTED", resp.StatusCode)
+	}
+	if got := s.RefusedProtocols(); len(got) != 1 || got[0] != "2" {
+		t.Fatalf("RefusedProtocols() = %q, want [2]", got)
+	}
+	resp = postScanRun(t, scanRunURL(s), "Bearer "+testToken, "1", []part{{name: "file", fileName: "results.sarif", data: []byte(`{}`)}})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted || len(s.Uploads()) != 1 || s.Uploads()[0].SBOM != nil {
+		t.Fatalf("protocol 1: %d, uploads %+v", resp.StatusCode, s.Uploads())
+	}
+}
+
+// RefuseSBOM plays an instance that cannot read the SBOM: 400
+// IMPORT_INVALID_SBOM, nothing stored, the scan still open for protocol 1.
+func TestFakeAPICanRefuseTheSBOM(t *testing.T) {
+	s := New(testToken)
+	defer s.Close()
+	s.RefuseSBOM()
+	file := part{name: "file", fileName: "results.sarif", data: []byte(`{}`)}
+	resp := postScanRun(t, scanRunURL(s), "Bearer "+testToken, "2", []part{file, {name: "sbom", fileName: "results.cdx.json", data: []byte(`{}`)}})
+	if resp.StatusCode != http.StatusBadRequest || codeOf(t, resp) != "IMPORT_INVALID_SBOM" || len(s.Uploads()) != 0 {
+		t.Fatalf("protocol 2: %d, uploads %d; want 400 IMPORT_INVALID_SBOM and nothing stored", resp.StatusCode, len(s.Uploads()))
+	}
+	resp = postScanRun(t, scanRunURL(s), "Bearer "+testToken, "1", []part{file})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted || len(s.Uploads()) != 1 {
+		t.Fatalf("protocol 1 after it: %d", resp.StatusCode)
 	}
 }

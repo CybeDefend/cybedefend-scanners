@@ -17,6 +17,7 @@ import (
 
 	"github.com/cybedefend/cybedefend-scanners/internal/adapter"
 	"github.com/cybedefend/cybedefend-scanners/internal/sarif"
+	"github.com/cybedefend/cybedefend-scanners/internal/sbom"
 )
 
 // BaseEnvKeys are passed to every tool, when the caller's environment has them.
@@ -29,6 +30,10 @@ const forbiddenPrefix = "CYBEDEFEND_"
 // maxSARIFBytes is how much of a tool's SARIF is kept: one byte past the
 // parser's limit, so that sarif.Parse refuses it with ErrTooLarge.
 const maxSARIFBytes = sarif.MaxDecompressedBytes + 1
+
+// maxSBOMBytes is the largest SBOM read: the instance's limit. A variable so
+// that a test can lower it.
+var maxSBOMBytes = sbom.MaxBytes
 
 // tailBytes is how much of the tool's other output is kept, for a failure.
 const tailBytes = 8 << 10
@@ -49,6 +54,12 @@ type Result struct {
 	// NothingToAudit is set when the tool said the source holds nothing it
 	// audits (adapter.QuietAdapter): SARIF is then an empty run of the tool.
 	NothingToAudit bool
+	// SBOM is the CycloneDX SBOM a converting adapter wrote
+	// (adapter.ConvertingAdapter), as the tool wrote it. SBOMErr says why
+	// there is none when one was asked for: it never fails the run, and
+	// names no path or package.
+	SBOM    []byte
+	SBOMErr error
 }
 
 // Run runs the adapter's tool on src, writing its SARIF to out. The tool's
@@ -85,12 +96,23 @@ func Run(ctx context.Context, a adapter.Adapter, src, out string, timeout time.D
 	return res, err
 }
 
-// runOnce is one run of the adapter's tool: see Run.
+// runOnce is one run of the adapter's tool: see Run. A converting adapter
+// (adapter.ConvertingAdapter) then has its report converted into the SARIF,
+// which must succeed, and into the SBOM, which may fail without failing the
+// run; both within the run's timeout.
 func runOnce(ctx context.Context, a adapter.Adapter, src, out string, timeout time.Duration, env map[string]string) (*Result, error) {
 	childEnv := toolEnv(a, env)
 	argv, onStdout := a.Command(src, out, childEnv)
 	if len(argv) == 0 || argv[0] == "" {
 		return nil, fmt.Errorf("%s: the adapter gave no command", a.Name())
+	}
+	var conv adapter.Conversion
+	converting := false
+	if c, ok := a.(adapter.ConvertingAdapter); ok {
+		conv, converting = c.Conversion(out)
+	}
+	if converting && (onStdout || len(conv.SARIF) == 0 || conv.SARIF[0] == "" || conv.Report == "") {
+		return nil, fmt.Errorf("%s: the adapter gave no usable conversion", a.Name())
 	}
 
 	if !onStdout {
@@ -98,8 +120,21 @@ func runOnce(ctx context.Context, a adapter.Adapter, src, out string, timeout ti
 			return nil, fmt.Errorf("create the output directory: %w", err)
 		}
 		// A file left by an earlier run must not pass for this run's output.
-		if err := os.Remove(out); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("remove the previous output: %w", err)
+		stale := []string{out}
+		if converting {
+			stale = append(stale, conv.Report)
+			if conv.SBOMPath != "" {
+				if err := os.MkdirAll(filepath.Dir(conv.SBOMPath), 0o700); err != nil {
+					return nil, fmt.Errorf("create the SBOM's directory: %w", err)
+				}
+				stale = append(stale, conv.SBOMPath)
+			}
+			defer os.Remove(conv.Report)
+		}
+		for _, p := range stale {
+			if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return nil, fmt.Errorf("remove the previous output: %w", err)
+			}
 		}
 	}
 
@@ -107,36 +142,20 @@ func runOnce(ctx context.Context, a adapter.Adapter, src, out string, timeout ti
 
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	// argv goes to the kernel as a list: never through a shell.
-	cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...)
-	cmd.Env = envList(childEnv)
-	cmd.Stdin = nil
-	cmd.WaitDelay = waitDelay
-	if info, err := os.Stat(src); err == nil && info.IsDir() {
-		cmd.Dir = src
-	}
 	tail := &tailWriter{max: tailBytes}
-	cmd.Stderr = tail
 	var captured *limitedBuffer
+	var stdout io.Writer = tail
 	if onStdout {
 		captured = &limitedBuffer{max: maxSARIFBytes}
-		cmd.Stdout = captured
-	} else {
-		cmd.Stdout = tail
+		stdout = captured
 	}
 
 	start := time.Now()
-	runErr := cmd.Run()
-	res := &Result{Duration: time.Since(start), Output: tail.bytes()}
-	if cmd.ProcessState != nil {
-		res.ExitCode = cmd.ProcessState.ExitCode()
-	}
+	code, runErr := execute(runCtx, argv, childEnv, src, stdout, tail)
+	res := &Result{Duration: time.Since(start), Output: tail.bytes(), ExitCode: code}
 
-	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-		return res, fmt.Errorf("%s timed out after %s", a.Name(), timeout)
-	}
-	if ctx.Err() != nil {
-		return res, fmt.Errorf("%s was stopped: %w", a.Name(), ctx.Err())
+	if err := interrupted(ctx, runCtx, a, timeout); err != nil {
+		return res, err
 	}
 	if runErr != nil {
 		var exitErr *exec.ExitError
@@ -162,7 +181,19 @@ func runOnce(ctx context.Context, a adapter.Adapter, src, out string, timeout ti
 		res.SARIF = captured.buf
 		return res, nil
 	}
-	data, err := readLimited(out)
+	if converting {
+		convTail := &tailWriter{max: tailBytes}
+		code, err := execute(runCtx, conv.SARIF, childEnv, src, convTail, convTail)
+		res.Duration = time.Since(start)
+		if ierr := interrupted(ctx, runCtx, a, timeout); ierr != nil {
+			return res, ierr
+		}
+		if err != nil {
+			res.Output = convTail.bytes()
+			return res, fmt.Errorf("%s: converting its report to SARIF failed with exit code %d", a.Name(), code)
+		}
+	}
+	data, err := readLimited(out, maxSARIFBytes)
 	if errors.Is(err, os.ErrNotExist) {
 		return res, fmt.Errorf("%s wrote no SARIF to %s", a.Name(), out)
 	}
@@ -173,7 +204,71 @@ func runOnce(ctx context.Context, a adapter.Adapter, src, out string, timeout ti
 		return res, fmt.Errorf("%s wrote an empty SARIF file", a.Name())
 	}
 	res.SARIF = data
+	if converting && len(conv.SBOM) > 0 {
+		res.SBOM, res.SBOMErr = convertSBOM(runCtx, conv, childEnv, src)
+		res.Duration = time.Since(start)
+		if ctx.Err() != nil {
+			return res, fmt.Errorf("%s was stopped: %w", a.Name(), ctx.Err())
+		}
+	}
 	return res, nil
+}
+
+// convertSBOM runs the SBOM conversion and reads what it wrote. Its errors
+// are fixed sentences: no path, no package, no tool output.
+func convertSBOM(runCtx context.Context, conv adapter.Conversion, env map[string]string, src string) ([]byte, error) {
+	discard := &tailWriter{max: tailBytes}
+	code, err := execute(runCtx, conv.SBOM, env, src, discard, discard)
+	if runCtx.Err() != nil {
+		return nil, errors.New("the SBOM conversion ran out of time")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("the SBOM conversion failed with exit code %d", code)
+	}
+	data, err := readLimited(conv.SBOMPath, int64(maxSBOMBytes)+1)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return nil, errors.New("the SBOM conversion wrote no SBOM")
+	case err != nil:
+		return nil, errors.New("the SBOM could not be read")
+	case len(data) > maxSBOMBytes:
+		return nil, sbom.ErrTooLarge
+	case len(data) == 0:
+		return nil, errors.New("the SBOM conversion wrote an empty SBOM")
+	}
+	return data, nil
+}
+
+// interrupted reports the run's timeout, or a stop of the caller's context.
+func interrupted(ctx, runCtx context.Context, a adapter.Adapter, timeout time.Duration) error {
+	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("%s timed out after %s", a.Name(), timeout)
+	}
+	if ctx.Err() != nil {
+		return fmt.Errorf("%s was stopped: %w", a.Name(), ctx.Err())
+	}
+	return nil
+}
+
+// execute runs argv (never through a shell) with exactly env, in src when it
+// is a directory, and returns its exit code.
+func execute(ctx context.Context, argv []string, env map[string]string, src string, stdout, stderr io.Writer) (int, error) {
+	// argv goes to the kernel as a list: never through a shell.
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Env = envList(env)
+	cmd.Stdin = nil
+	cmd.WaitDelay = waitDelay
+	if info, err := os.Stat(src); err == nil && info.IsDir() {
+		cmd.Dir = src
+	}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err := cmd.Run()
+	code := 0
+	if cmd.ProcessState != nil {
+		code = cmd.ProcessState.ExitCode()
+	}
+	return code, err
 }
 
 // toolDirKeys name the directories a tool writes besides its output: the
@@ -221,13 +316,13 @@ func envList(env map[string]string) []string {
 	return list
 }
 
-func readLimited(path string) ([]byte, error) {
+func readLimited(path string, limit int64) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return io.ReadAll(io.LimitReader(f, maxSARIFBytes))
+	return io.ReadAll(io.LimitReader(f, limit))
 }
 
 // limitedBuffer keeps the first max bytes and drops the rest, without ever

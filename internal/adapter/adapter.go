@@ -71,6 +71,40 @@ type FallbackAdapter interface {
 	Fallback(exitCode int, output []byte) (alt Adapter, reason string, ok bool)
 }
 
+// SBOMAdapter is an adapter whose tool can also describe the source's whole
+// package inventory as a CycloneDX JSON SBOM (trivy-fs): every package it
+// found, with or without an advisory, its licenses and the dependency graph,
+// where the SARIF lists only the vulnerable ones.
+type SBOMAdapter interface {
+	Adapter
+	// WithSBOM returns the adapter whose run also writes the SBOM to path.
+	WithSBOM(path string) Adapter
+}
+
+// Conversion is how a ConvertingAdapter's report becomes the SARIF and the SBOM.
+type Conversion struct {
+	// Report is the file Command writes: the tool's own report. The runner
+	// removes it once converted.
+	Report string
+	// SARIF writes the SARIF to the run's out from Report. Its failure is the
+	// run's failure.
+	SARIF []string
+	// SBOM writes SBOMPath from Report, or is nil. Its failure costs the SBOM
+	// only, never the run.
+	SBOM     []string
+	SBOMPath string
+}
+
+// ConvertingAdapter is an adapter whose Command may write the tool's own
+// report rather than SARIF; conversion commands then turn that one report
+// into the SARIF and an SBOM, so the source is scanned once for both.
+type ConvertingAdapter interface {
+	Adapter
+	// Conversion returns the conversion of a run whose SARIF goes to out, or
+	// false when Command writes the SARIF itself.
+	Conversion(out string) (Conversion, bool)
+}
+
 // ImageAdapter is an adapter that scans a container image rather than the
 // source directory (trivy-image). The command binds it to the image the user
 // named before running it.

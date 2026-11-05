@@ -8,15 +8,36 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// ScanProtocolVersion is the scan protocol this runner speaks, sent as
-// X-CybeDefend-Scan-Protocol on every results upload of a scan run.
+// ScanProtocolVersion is the scan protocol of a results upload with the SARIF
+// alone, sent as X-CybeDefend-Scan-Protocol.
 const ScanProtocolVersion = 1
+
+// ScanProtocolVersionSBOM is the scan protocol of a results upload that also
+// carries a CycloneDX SBOM, in the part « sbom ».
+const ScanProtocolVersionSBOM = 2
+
+// The SBOM part of a protocol 2 upload.
+const (
+	SBOMPartName    = "results.cdx.json"
+	SBOMContentType = "application/vnd.cyclonedx+json"
+)
+
+// SBOMOutcome says what became of the SBOM of a results upload.
+type SBOMOutcome struct {
+	// Accepted is true when the instance took the upload with its SBOM.
+	Accepted bool
+	// Declined is the refusal code that made the runner send the SARIF again
+	// without the SBOM: SCAN_PROTOCOL_UNSUPPORTED (an instance older than
+	// protocol 2) or IMPORT_INVALID_SBOM (the instance could not read it).
+	Declined string
+}
 
 // ScanProtocolHeader carries ScanProtocolVersion.
 const ScanProtocolHeader = "X-CybeDefend-Scan-Protocol"
@@ -85,42 +106,105 @@ var scanRunWait = func(ctx context.Context, d time.Duration) error {
 // ErrScanTokenRefused, any other answer an *APIError (413 and 400 are never
 // retried).
 func (c *Client) SubmitScanRun(ctx context.Context, scanID string, sarif []byte) error {
+	_, err := c.SubmitScanRunWithSBOM(ctx, scanID, sarif, nil)
+	return err
+}
+
+// SubmitScanRunWithSBOM is SubmitScanRun with a CycloneDX SBOM: the upload is
+// protocol 2, with the SBOM as the part « sbom » after the SARIF. When the
+// instance refuses it with 400 SCAN_PROTOCOL_UNSUPPORTED (an instance older
+// than protocol 2) or 400 IMPORT_INVALID_SBOM, the same SARIF is sent once more,
+// as protocol 1 and without the SBOM, and SBOMOutcome.Declined names the
+// refusal. Both attempts, their retries and their waits share one
+// ScanRunUploadDeadline and one ScanRunMaxTotalWait. A nil sbom is
+// SubmitScanRun.
+func (c *Client) SubmitScanRunWithSBOM(ctx context.Context, scanID string, sarif, sbom []byte) (SBOMOutcome, error) {
+	var outcome SBOMOutcome
 	payload, name, err := encodeSARIF(sarif)
 	if err != nil {
-		return err
+		return outcome, err
 	}
-	body, contentType, err := buildScanRunBody(payload, name)
+	body, contentType, err := buildScanRunBody(payload, name, nil)
 	if err != nil {
-		return err
+		return outcome, err
 	}
-	endpoint := strings.TrimRight(c.BaseURL, "/") + "/scan-runs/" + url.PathEscape(scanID) + "/results"
+	var bodySBOM []byte
+	var contentTypeSBOM string
+	if sbom != nil {
+		if bodySBOM, contentTypeSBOM, err = buildScanRunBody(payload, name, sbom); err != nil {
+			return outcome, err
+		}
+	}
 
 	hc := c.HTTP
 	if hc == nil {
 		hc = &http.Client{Timeout: DefaultTimeout}
 	}
-
 	parent := ctx
-	deadline := scanRunNow().Add(ScanRunUploadDeadline)
 	ctx, cancel := context.WithTimeout(parent, ScanRunUploadDeadline)
 	defer cancel()
-	// pastDeadline turns an error caused by the phase's own deadline into
-	// ErrScanRunDeadline; a stop of the run itself keeps its own error.
-	pastDeadline := func(err error) error {
-		if parent.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
-			return ErrScanRunDeadline
-		}
-		return err
+	a := &scanRunAttempts{
+		c: c, hc: hc, parent: parent,
+		endpoint: strings.TrimRight(c.BaseURL, "/") + "/scan-runs/" + url.PathEscape(scanID) + "/results",
+		deadline: scanRunNow().Add(ScanRunUploadDeadline),
 	}
 
-	var waited time.Duration
+	if sbom != nil {
+		err := a.submit(ctx, bodySBOM, contentTypeSBOM, ScanProtocolVersionSBOM)
+		code := sbomDeclined(err)
+		if code == "" {
+			outcome.Accepted = err == nil
+			return outcome, err
+		}
+		outcome.Declined = code
+	}
+	return outcome, a.submit(ctx, body, contentType, ScanProtocolVersion)
+}
+
+// sbomDeclined returns the code of a refusal of a protocol 2 upload after
+// which the instance stored nothing and kept the token unspent, so that the
+// same SARIF may go again without the SBOM, or "". Every other refusal is
+// final, as for protocol 1.
+func sbomDeclined(err error) string {
+	var apiErr *APIError
+	switch {
+	case errors.Is(err, ErrProtocolRefused):
+		return "SCAN_PROTOCOL_UNSUPPORTED"
+	case errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && apiErr.Code == "IMPORT_INVALID_SBOM":
+		return apiErr.Code
+	}
+	return ""
+}
+
+// scanRunAttempts is the state the attempts of one upload phase share: its
+// deadline and the time already waited.
+type scanRunAttempts struct {
+	c        *Client
+	hc       *http.Client
+	parent   context.Context
+	endpoint string
+	deadline time.Time
+	waited   time.Duration
+}
+
+// pastDeadline turns an error caused by the phase's own deadline into
+// ErrScanRunDeadline; a stop of the run itself keeps its own error.
+func (a *scanRunAttempts) pastDeadline(err error) error {
+	if a.parent.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+		return ErrScanRunDeadline
+	}
+	return err
+}
+
+// submit sends one body, with its retries, within the phase's deadline.
+func (a *scanRunAttempts) submit(ctx context.Context, body []byte, contentType string, protocol int) error {
 	for attempt := 0; ; attempt++ {
-		if !scanRunNow().Before(deadline) {
+		if !scanRunNow().Before(a.deadline) {
 			return ErrScanRunDeadline
 		}
-		retry, err := c.submitOnce(ctx, hc, endpoint, contentType, body)
+		retry, err := a.c.submitOnce(ctx, a.hc, a.endpoint, contentType, body, protocol)
 		if !retry {
-			return pastDeadline(err)
+			return a.pastDeadline(err)
 		}
 		var apiErr *APIError
 		throttled := errors.As(err, &apiErr) && apiErr.throttled()
@@ -137,19 +221,19 @@ func (c *Client) SubmitScanRun(ctx context.Context, scanID string, sarif []byte)
 				wait = min(after, ScanRunMaxRetryAfter)
 			}
 		}
-		if left := ScanRunMaxTotalWait - waited; wait > left {
+		if left := ScanRunMaxTotalWait - a.waited; wait > left {
 			wait = left
 		}
 		if wait <= 0 {
 			return err
 		}
 		// A retry that could only start at or past the deadline is not waited for.
-		if wait >= deadline.Sub(scanRunNow()) {
+		if wait >= a.deadline.Sub(scanRunNow()) {
 			return ErrScanRunDeadline
 		}
-		waited += wait
+		a.waited += wait
 		if werr := scanRunWait(ctx, wait); werr != nil {
-			return pastDeadline(werr)
+			return a.pastDeadline(werr)
 		}
 	}
 }
@@ -172,7 +256,7 @@ func (e *APIError) retryAfter() (time.Duration, bool) {
 }
 
 // submitOnce sends one request, and says whether its outcome may be retried.
-func (c *Client) submitOnce(ctx context.Context, hc *http.Client, endpoint, contentType string, body []byte) (bool, error) {
+func (c *Client) submitOnce(ctx context.Context, hc *http.Client, endpoint, contentType string, body []byte, protocol int) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return false, fmt.Errorf("build the results request: %w", err)
@@ -180,7 +264,7 @@ func (c *Client) submitOnce(ctx context.Context, hc *http.Client, endpoint, cont
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set(ScanProtocolHeader, strconv.Itoa(ScanProtocolVersion))
+	req.Header.Set(ScanProtocolHeader, strconv.Itoa(protocol))
 	if c.UserAgent != "" {
 		req.Header.Set("User-Agent", c.UserAgent)
 	}
@@ -214,8 +298,9 @@ func (c *Client) submitOnce(ctx context.Context, hc *http.Client, endpoint, cont
 	}
 }
 
-// buildScanRunBody writes the multipart body: the file part only.
-func buildScanRunBody(payload []byte, name string) ([]byte, string, error) {
+// buildScanRunBody writes the multipart body: the file part, then the sbom
+// part when sbom is not nil.
+func buildScanRunBody(payload []byte, name string, sbom []byte) ([]byte, string, error) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	fw, err := mw.CreateFormFile("file", name)
@@ -224,6 +309,18 @@ func buildScanRunBody(payload []byte, name string) ([]byte, string, error) {
 	}
 	if _, err := fw.Write(payload); err != nil {
 		return nil, "", fmt.Errorf("write the file part: %w", err)
+	}
+	if sbom != nil {
+		h := make(textproto.MIMEHeader)
+		h.Set("Content-Disposition", `form-data; name="sbom"; filename="`+SBOMPartName+`"`)
+		h.Set("Content-Type", SBOMContentType)
+		sw, err := mw.CreatePart(h)
+		if err != nil {
+			return nil, "", fmt.Errorf("write the sbom part: %w", err)
+		}
+		if _, err := sw.Write(sbom); err != nil {
+			return nil, "", fmt.Errorf("write the sbom part: %w", err)
+		}
 	}
 	if err := mw.Close(); err != nil {
 		return nil, "", fmt.Errorf("close the multipart body: %w", err)

@@ -4,13 +4,15 @@
 //
 //	appsec-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout D]
 //	                   [--image REF] [--image-archive FILE]   (trivy-image only)
+//	                   [--sbom-out FILE]                      (trivy-fs only)
 //	appsec-scanner run <adapter> --scan-run [--source DIR] [--out FILE] [--timeout D]
 //	appsec-scanner version
 //
 // --scan-run is the mode of a scanner pod of a CybeDefend Community cluster:
 // it fetches the archive of CYBEDEFEND_ARCHIVE_URL into --source, runs the
 // tool, and submits the SARIF to CYBEDEFEND_API_URL with CYBEDEFEND_SCAN_TOKEN
-// (scan CYBEDEFEND_SCAN_ID, scan protocol 1).
+// (scan CYBEDEFEND_SCAN_ID, scan protocol 1; protocol 2 when trivy-fs also
+// sends its CycloneDX SBOM). --sbom-out writes that SBOM on a local run.
 //
 // Exit codes: 0 done; 2 the tool failed; 3 the SARIF was refused locally or by
 // the API; 4 configuration error; 5 the instance refused the scan protocol;
@@ -35,6 +37,7 @@ import (
 	"github.com/cybedefend/cybedefend-scanners/internal/config"
 	"github.com/cybedefend/cybedefend-scanners/internal/runner"
 	"github.com/cybedefend/cybedefend-scanners/internal/sarif"
+	"github.com/cybedefend/cybedefend-scanners/internal/sbom"
 	"github.com/cybedefend/cybedefend-scanners/internal/upload"
 )
 
@@ -47,7 +50,7 @@ const (
 	exitTool     = 2
 	exitRefused  = 3
 	exitConfig   = 4
-	usageMessage = "usage: appsec-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout DURATION] [--image REF] [--image-archive FILE]\n       appsec-scanner run <adapter> --scan-run [--source DIR] [--out FILE] [--timeout DURATION]\n       appsec-scanner version\n"
+	usageMessage = "usage: appsec-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout DURATION] [--image REF] [--image-archive FILE] [--sbom-out FILE]\n       appsec-scanner run <adapter> --scan-run [--source DIR] [--out FILE] [--timeout DURATION]\n       appsec-scanner version\n"
 )
 
 // scanIDPattern is what a scan id printed to the terminal may look like.
@@ -113,6 +116,21 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 		logf("CYBEDEFEND_IMAGE is only used by trivy-image")
 		return exitConfig
 	}
+	// The SBOM: with --sbom-out, and always in a scan run, from an adapter
+	// that can write one.
+	sbomPath := ""
+	if sa, ok := a.(adapter.SBOMAdapter); ok {
+		sbomPath = cfg.SBOMOut
+		if sbomPath == "" && cfg.ScanRun {
+			sbomPath = filepath.Join(filepath.Dir(cfg.Out), scanRunSBOMName)
+		}
+		if sbomPath != "" {
+			a = sa.WithSBOM(sbomPath)
+		}
+	} else if cfg.SBOMOut != "" {
+		logf("--sbom-out is only used by trivy-fs")
+		return exitConfig
+	}
 
 	if cfg.ScanRun {
 		logf("fetching the archive of scan %s", cfg.ScanID)
@@ -163,7 +181,7 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 		return exitRefused
 	}
 	if rw, ok := a.(adapter.SARIFRewriter); ok {
-		logf("rewrote %d rule ids", rw.RewriteSARIF(log, cfg.Source, env))
+		logf("rewrote %d values of the SARIF", rw.RewriteSARIF(log, cfg.Source, env))
 	}
 	rep := sarif.Normalize(log, sarif.NormalizeOptions{SourceRoot: sourceRoot, DropSnippets: a.Type() == adapter.TypeSecret})
 	logf("normalised: %d results, %d rewritten, %d dropped", countResults(log), rep.Rewritten, rep.Dropped)
@@ -179,8 +197,13 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 	}
 	logf("wrote %d bytes to %s", buf.Len(), cfg.Out)
 
+	var sbomDoc []byte
+	if sbomPath != "" {
+		sbomDoc = prepareSBOM(a.Name(), res, sourceRoot, sbomPath, logf)
+	}
+
 	if cfg.ScanRun {
-		code := submitScanRun(ctx, cfg, buf.Bytes(), logf)
+		code := submitScanRun(ctx, cfg, buf.Bytes(), sbomDoc, logf)
 		if code == exitOK {
 			fmt.Fprintln(stdout, "results submitted")
 		}
@@ -218,6 +241,38 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 		fmt.Fprintln(stdout, "scan queued")
 	}
 	return exitOK
+}
+
+// scanRunSBOMName is the SBOM a scan run writes next to --out.
+const scanRunSBOMName = "results.cdx.json"
+
+// prepareSBOM readies the SBOM the run produced (sbom.Prepare: a version the
+// instance reads, paths relative to the source, 50 MB at most) and writes it
+// to path. It returns nil, and leaves nothing at path, when there is none to
+// send: the SBOM never fails the scan. Its lines carry counts only, never a
+// package or a path.
+func prepareSBOM(name string, res *runner.Result, sourceRoot, path string, logf func(string, ...any)) []byte {
+	fail := func(reason error) []byte {
+		// What the tool wrote names the pod's paths: it does not stay.
+		_ = os.Remove(path)
+		logf("%s: no SBOM: %v; the results go without it", name, reason)
+		return nil
+	}
+	if res.SBOMErr != nil {
+		return fail(res.SBOMErr)
+	}
+	if res.SBOM == nil {
+		return fail(errors.New("the tool wrote none"))
+	}
+	doc, rep, err := sbom.Prepare(res.SBOM, sourceRoot)
+	if err != nil {
+		return fail(err)
+	}
+	if err := writeFile(path, doc); err != nil {
+		return fail(errors.New("it could not be written"))
+	}
+	logf("SBOM: %d components, %d paths made relative, %d bytes", rep.Components, rep.Rewritten, len(doc))
+	return doc
 }
 
 // toolEnv reads the keys a tool may receive; runner.Run filters them again.

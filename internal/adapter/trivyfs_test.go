@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/cybedefend/cybedefend-scanners/internal/sarif"
 )
 
 func TestTrivyFsCommand(t *testing.T) {
@@ -165,5 +167,97 @@ func TestTrivyFsKeepsEveryOtherFailure(t *testing.T) {
 		if _, _, ok := (TrivyFs{}).Fallback(tc.code, []byte(tc.output)); ok {
 			t.Fatalf("exit %d with %q falls back", tc.code, tc.output)
 		}
+	}
+}
+
+// With an SBOM, trivy-fs scans once and converts that one report twice: Maven
+// Central, which limits requests per IP, is called by one scan only.
+func TestTrivyFsWithSBOMWritesTrivysJSONReportOnce(t *testing.T) {
+	a := TrivyFs{}.WithSBOM("/tmp/appsec-scanner/results.cdx.json")
+	argv, onStdout := a.Command("/src", "/tmp/appsec-scanner/results.sarif", map[string]string{})
+	want := []string{
+		"trivy", "fs", "--scanners", "vuln", "--format", "json", "--list-all-pkgs",
+		"--output", "/tmp/appsec-scanner/results.sarif.trivy.json",
+		"--exit-code", "0", "--cache-dir", "/tmp/appsec-scanner/trivy-cache",
+		"--skip-version-check", "--disable-telemetry", "--quiet", "/src",
+	}
+	if !reflect.DeepEqual(argv, want) || onStdout {
+		t.Fatalf("argv = %q (stdout %v)\nwant   %q", argv, onStdout, want)
+	}
+	conv, ok := a.(ConvertingAdapter).Conversion("/tmp/appsec-scanner/results.sarif")
+	if !ok {
+		t.Fatal("no conversion with an SBOM")
+	}
+	wantConv := Conversion{
+		Report:   "/tmp/appsec-scanner/results.sarif.trivy.json",
+		SARIF:    []string{"trivy", "convert", "--format", "sarif", "--output", "/tmp/appsec-scanner/results.sarif", "--quiet", "/tmp/appsec-scanner/results.sarif.trivy.json"},
+		SBOM:     []string{"trivy", "convert", "--format", "cyclonedx", "--output", "/tmp/appsec-scanner/results.cdx.json", "--quiet", "/tmp/appsec-scanner/results.sarif.trivy.json"},
+		SBOMPath: "/tmp/appsec-scanner/results.cdx.json",
+	}
+	if !reflect.DeepEqual(conv, wantConv) {
+		t.Fatalf("conversion = %+v\nwant         %+v", conv, wantConv)
+	}
+}
+
+func TestTrivyFsWithoutSBOMWritesSARIFDirectly(t *testing.T) {
+	if _, ok := (TrivyFs{}).Conversion("/tmp/o.sarif"); ok {
+		t.Fatal("a conversion without an SBOM: the SARIF is written by the scan itself")
+	}
+	if _, ok := Adapter(TrivyFs{}).(SBOMAdapter); !ok {
+		t.Fatal("trivy-fs is not an SBOMAdapter")
+	}
+}
+
+func TestOnlyTrivyFsWritesAnSBOM(t *testing.T) {
+	for _, name := range Names() {
+		a, _ := Get(name)
+		if _, ok := a.(SBOMAdapter); ok != (name == "trivy-fs") {
+			t.Errorf("%s: SBOMAdapter = %v", name, ok)
+		}
+	}
+}
+
+func TestTrivyFsOfflineFallbackKeepsTheSBOM(t *testing.T) {
+	maven429 := []byte("FATAL\tremote Maven repository returned 429 Too Many Requests for https://repo.maven.apache.org/x.pom\n")
+	a := TrivyFs{}.WithSBOM("/tmp/s.cdx.json").(FallbackAdapter)
+	alt, _, ok := a.Fallback(1, maven429)
+	if !ok {
+		t.Fatal("no fallback")
+	}
+	argv, _ := alt.Command("/src", "/tmp/o.sarif", map[string]string{})
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "--offline-scan") || !strings.Contains(joined, "--format json --list-all-pkgs") {
+		t.Fatalf("fallback argv = %q, want the JSON report, offline", argv)
+	}
+	conv, ok := alt.(ConvertingAdapter).Conversion("/tmp/o.sarif")
+	if !ok || conv.SBOMPath != "/tmp/s.cdx.json" {
+		t.Fatalf("fallback conversion = %+v, %v: the SBOM was lost", conv, ok)
+	}
+}
+
+// trivy convert names the JSON report as the SARIF's ROOTPATH: the results
+// would resolve against it, so ROOTPATH is set back to the scanned source, as
+// a direct `trivy fs --format sarif` writes it.
+func TestTrivyFsRewritesROOTPATHToTheScannedSource(t *testing.T) {
+	l, err := sarif.Parse(strings.NewReader(`{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Trivy"}},` +
+		`"originalUriBaseIds":{"ROOTPATH":{"uri":"file:///tmp/appsec-scanner/results.sarif.trivy.json/"}},` +
+		`"results":[{"ruleId":"CVE-1","message":{"text":"x"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"package-lock.json","uriBaseId":"ROOTPATH"}}}]}]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rw SARIFRewriter = TrivyFs{}
+	if n := rw.RewriteSARIF(l, "/src/repo dir", nil); n != 1 {
+		t.Fatalf("rewrote %d, want 1", n)
+	}
+	if got := l.Runs[0].OriginalURIBaseIDs["ROOTPATH"].URI; got != "file:///src/repo%20dir/" {
+		t.Fatalf("ROOTPATH = %q", got)
+	}
+	rep := sarif.Normalize(l, sarif.NormalizeOptions{SourceRoot: "/src/repo dir"})
+	if rep.Dropped != 0 || l.Runs[0].Results[0].Locations[0].PhysicalLocation.ArtifactLocation.URI != "package-lock.json" {
+		t.Fatalf("normalised %+v: %+v", rep, l.Runs[0].Results[0].Locations[0].PhysicalLocation.ArtifactLocation)
+	}
+	// a direct SARIF already names the source: nothing to rewrite
+	if n := rw.RewriteSARIF(l, "/src/repo dir", nil); n != 0 {
+		t.Fatalf("second pass rewrote %d, want 0", n)
 	}
 }

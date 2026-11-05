@@ -188,10 +188,14 @@ func TestReadmeDocumentsScanRuns(t *testing.T) {
 	for _, want := range []string{
 		"--scan-run", "`CYBEDEFEND_API_URL`", "`CYBEDEFEND_SCAN_ID`", "`CYBEDEFEND_SCAN_TOKEN`", "`CYBEDEFEND_ARCHIVE_URL`",
 		"X-CybeDefend-Scan-Protocol: 1", "do not carry that folder's name", "| 5 |", "| 6 |", "POST <api-url>/scan-runs/<scan id>/results",
+		"X-CybeDefend-Scan-Protocol: 2", "`sbom`", "results.cdx.json", "application/vnd.cyclonedx+json", "IMPORT_INVALID_SBOM", "SCAN_PROTOCOL_UNSUPPORTED",
 	} {
 		if !strings.Contains(section, want) {
 			t.Errorf("the scan-run section lacks %q", want)
 		}
+	}
+	if !strings.Contains(readme, "`--sbom-out`") {
+		t.Error("README.md does not document --sbom-out")
 	}
 	for _, want := range []string{"| 5 |", "| 6 |"} {
 		if !strings.Contains(readme[strings.Index(readme, "## Exit codes"):], want) {

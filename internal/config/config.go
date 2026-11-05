@@ -32,6 +32,10 @@ type Config struct {
 	// `docker save` tar Trivy reads instead of pulling it (--image-archive,
 	// else IMAGE_ARCHIVE).
 	Image, ImageArchive string
+	// SBOMOut is where an adapter that can (trivy-fs) also writes a
+	// CycloneDX SBOM of the source (--sbom-out); empty for none. A scan run
+	// writes one next to --out whatever it says, and submits it.
+	SBOMOut string
 	// ScanRun is the mode of a scanner pod of a CybeDefend Community
 	// cluster (--scan-run): the source is fetched from ArchiveURL into
 	// Source, and the SARIF goes to POST <APIURL>/scan-runs/<ScanID>/results
@@ -69,6 +73,7 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 	fs.DurationVar(&c.Timeout, "timeout", DefaultTimeout, "how long the tool may run")
 	fs.StringVar(&c.Image, "image", "", "image reference (trivy-image only)")
 	fs.StringVar(&c.ImageArchive, "image-archive", "", "docker save archive of the image (trivy-image only)")
+	fs.StringVar(&c.SBOMOut, "sbom-out", "", "where a CycloneDX SBOM of the source is also written (trivy-fs only)")
 
 	var positional []string
 	rest := args
@@ -101,6 +106,9 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 		return Config{}, fmt.Errorf("--source: %w", err)
 	}
 	c.Source = src
+	if c.SBOMOut != "" && filepath.Clean(c.SBOMOut) == filepath.Clean(c.Out) {
+		return Config{}, errors.New("--sbom-out must not be the --out file")
+	}
 
 	if c.Image == "" {
 		c.Image = strings.TrimSpace(getenv("CYBEDEFEND_IMAGE"))

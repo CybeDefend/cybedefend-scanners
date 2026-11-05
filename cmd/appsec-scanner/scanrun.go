@@ -132,11 +132,21 @@ func isTransport(err error) bool {
 // (SIGTERM, the pod deleted) during the fetch: not a fetch failure.
 var errRunStopped = errors.New("the scan run was stopped")
 
-// submitScanRun sends the SARIF to the results route of the scan run.
-func submitScanRun(ctx context.Context, cfg config.Config, sarif []byte, logf func(string, ...any)) int {
+// submitScanRun sends the SARIF, and the SBOM when there is one, to the
+// results route of the scan run. An instance that does not take the SBOM gets
+// the SARIF alone (upload.SubmitScanRunWithSBOM), said in one line.
+func submitScanRun(ctx context.Context, cfg config.Config, sarif, sbom []byte, logf func(string, ...any)) int {
 	client := &upload.Client{BaseURL: cfg.APIURL, Token: cfg.ScanToken, UserAgent: "appsec-scanner/" + version}
-	logf("submitting %d bytes of results to scan %s", len(sarif), cfg.ScanID)
-	if err := client.SubmitScanRun(ctx, cfg.ScanID, sarif); err != nil {
+	if sbom != nil {
+		logf("submitting %d bytes of results and %d bytes of SBOM to scan %s", len(sarif), len(sbom), cfg.ScanID)
+	} else {
+		logf("submitting %d bytes of results to scan %s", len(sarif), cfg.ScanID)
+	}
+	outcome, err := client.SubmitScanRunWithSBOM(ctx, cfg.ScanID, sarif, sbom)
+	if outcome.Declined != "" {
+		logf("the instance did not accept the SBOM (%s): the results were sent without it", outcome.Declined)
+	}
+	if err != nil {
 		code, sentence := scanRunOutcome(err)
 		logf("the results were not submitted: %s", sentence)
 		return code
