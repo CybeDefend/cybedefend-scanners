@@ -253,3 +253,38 @@ func TestReadmeDocumentsScanRuns(t *testing.T) {
 		}
 	}
 }
+
+// TestReadmeNamesNoUnreleasedCliCommand: the public CybeDefend CLI has no
+// import command, so the README sends a SARIF file with curl instead.
+func TestReadmeNamesNoUnreleasedCliCommand(t *testing.T) {
+	readme := string(read(t, "README.md"))
+	if strings.Contains(readme, "cybedefend import") {
+		t.Error("README.md names `cybedefend import`, which the public CLI does not have")
+	}
+	byo := section(t, readme, "## Bring your own tool")
+	if !strings.Contains(byo, "/scan/import/start") {
+		t.Error("« Bring your own tool » does not show the import route")
+	}
+}
+
+// TestDcoChecksOnlyThePullRequestCommits: on a pull request the checkout is
+// GitHub's merge commit, which carries no sign-off; the check skips merges.
+func TestDcoChecksOnlyThePullRequestCommits(t *testing.T) {
+	wf := string(read(t, ".github/workflows/dco.yml"))
+	if !strings.Contains(wf, "git log --no-merges") {
+		t.Error("dco.yml lists merge commits: GitHub's synthetic merge commit then fails the check")
+	}
+}
+
+// TestRepositoryIsCybedefendScanners: the action, the GitLab template and the
+// Go module are published as CybeDefend/cybedefend-scanners.
+func TestRepositoryIsCybedefendScanners(t *testing.T) {
+	if !strings.HasPrefix(string(read(t, "go.mod")), "module github.com/cybedefend/cybedefend-scanners\n") {
+		t.Error("go.mod does not declare github.com/cybedefend/cybedefend-scanners")
+	}
+	for _, f := range []string{"README.md", "examples/gitlab/.gitlab-ci.yml", "templates/gitlab/appsec-scanners.gitlab-ci.yml"} {
+		if strings.Contains(string(read(t, f)), "CybeDefend/appsec-scanners") {
+			t.Errorf("%s names the repository CybeDefend/appsec-scanners", f)
+		}
+	}
+}

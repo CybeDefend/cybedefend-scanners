@@ -164,8 +164,8 @@ no commit variable: the results are attached to the branch.
 The upload is `multipart/form-data` to
 `POST <api-url>/project/<project id>/scan/import/start`, gzipped above 1 MiB.
 The instance answers `202` with the scan id and processes the file
-afterwards; the scanner does not wait. To wait for the outcome, upload the
-SARIF with `cybedefend import --wait` (below).
+afterwards; the scanner does not wait. A failed import names its code in the
+scan's error message, on the project's scans in the instance.
 
 ## Exit codes
 
@@ -281,17 +281,18 @@ included, end within 6 minutes.
 ## Bring your own tool
 
 Any SARIF 2.1.0 file, from any scanner, can be sent to a Community Edition
-instance with the [CybeDefend CLI](https://github.com/CybeDefend/cybedefend-cli),
-with the same personal access token in `CYBEDEFEND_TOKEN`:
+instance on the same import route, with the same personal access token in
+`CYBEDEFEND_TOKEN`:
 
 ```bash
 semgrep scan --sarif --output semgrep.sarif .
-cybedefend import --api-url https://appsec.example.com/api --format sarif --type sast --branch main --project-id <project id> semgrep.sarif
+curl -H "Authorization: Bearer $CYBEDEFEND_TOKEN" \
+  -F file=@semgrep.sarif -F type=sast -F branch=main \
+  "$CYBEDEFEND_API_URL/project/$CYBEDEFEND_PROJECT_ID/scan/import/start"
 ```
 
-`--type` is `sast`, `iac`, `secret`, `cicd`, `sca` or `container`; `--image`
-names the image of a container import, and `--wait` waits for the import to be
-processed and prints its outcome.
+`type` is `sast`, `iac`, `secret`, `cicd`, `sca` or `container`; a `container`
+import also takes `-F image=<reference>`. The answer is `202 { scanId }`.
 
 ## Opengrep rules
 

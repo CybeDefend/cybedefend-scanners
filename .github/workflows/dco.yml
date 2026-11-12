@@ -22,4 +22,4 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -o pipefail
-          git log --format='%H%x00%B%x1e' "origin/${BASE_REF}..HEAD" | go run ./cmd/dco-check
+          git log --no-merges --format='%H%x00%B%x1e' "origin/${BASE_REF}..HEAD" | go run ./cmd/dco-check
