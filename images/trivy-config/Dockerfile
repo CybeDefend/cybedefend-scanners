@@ -1,6 +1,6 @@
-# appsec-scanners-trivy-config: Trivy's `config` scan (iac), normalised and
+# cybedefend-scanners/trivy-config: Trivy's `config` scan (iac), normalised and
 # uploaded by appsec-scanner. Build from the repository root:
-#   docker build -f images/trivy-config/Dockerfile -t appsec-scanners-trivy-config:dev .
+#   docker build -f images/trivy-config/Dockerfile -t cybedefend-scanners/trivy-config:dev .
 #
 # Trivy runs on its embedded checks only (--skip-check-update): no download at
 # run time, so the image works with --network none.

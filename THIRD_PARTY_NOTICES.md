@@ -26,12 +26,12 @@ distributions' own licence files and source.
 
 | Image | Tool | Version | Licence | Source | Release asset (sha256) |
 |---|---|---|---|---|---|
-| `appsec-scanners-opengrep` | Opengrep | v1.33.1 | LGPL-2.1 | https://github.com/opengrep/opengrep | `https://github.com/opengrep/opengrep/releases/download/v1.33.1/opengrep_manylinux_x86` (`46e8133cc490f9f50518061590ce2f6be5a08afaeda034471c0ceda4b3899808`), `opengrep_manylinux_aarch64` (`d1433f63a90b8bc0b6ad4b498a13b372b856ce9a754a43484ba4920fe2d76dcf`) |
-| `appsec-scanners-gitleaks` | Gitleaks | 8.30.1 | MIT | https://github.com/gitleaks/gitleaks | built from source: Go module `github.com/zricethezav/gitleaks/v8@v8.30.1` (`h1:PmEvCfVI7ti9dV3s5aMZUY7sS2GxRvG3yzih7E+cS3w=`, tag commit `83d9cd684c87d95d656c1458ef04895a7f1cbd8e`), Go 1.26.10, five dependencies raised (below) |
-| `appsec-scanners-trivy-config` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied) |
-| `appsec-scanners-zizmor` | zizmor | 1.31.1 | MIT | https://github.com/zizmorcore/zizmor | image `ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9` (used as the final base) |
-| `appsec-scanners-trivy-fs` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied); vulnerability database downloaded at run time |
-| `appsec-scanners-trivy-image` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied); vulnerability database downloaded at run time |
+| `cybedefend-scanners/opengrep` | Opengrep | v1.33.1 | LGPL-2.1 | https://github.com/opengrep/opengrep | `https://github.com/opengrep/opengrep/releases/download/v1.33.1/opengrep_manylinux_x86` (`46e8133cc490f9f50518061590ce2f6be5a08afaeda034471c0ceda4b3899808`), `opengrep_manylinux_aarch64` (`d1433f63a90b8bc0b6ad4b498a13b372b856ce9a754a43484ba4920fe2d76dcf`) |
+| `cybedefend-scanners/gitleaks` | Gitleaks | 8.30.1 | MIT | https://github.com/gitleaks/gitleaks | built from source: Go module `github.com/zricethezav/gitleaks/v8@v8.30.1` (`h1:PmEvCfVI7ti9dV3s5aMZUY7sS2GxRvG3yzih7E+cS3w=`, tag commit `83d9cd684c87d95d656c1458ef04895a7f1cbd8e`), Go 1.26.10, five dependencies raised (below) |
+| `cybedefend-scanners/trivy-config` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied) |
+| `cybedefend-scanners/zizmor` | zizmor | 1.31.1 | MIT | https://github.com/zizmorcore/zizmor | image `ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9` (used as the final base) |
+| `cybedefend-scanners/trivy-fs` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied); vulnerability database downloaded at run time |
+| `cybedefend-scanners/trivy-image` | Trivy | v0.76.1 | Apache-2.0 | https://github.com/aquasecurity/trivy | image `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` (binary copied); vulnerability database downloaded at run time |
 
 ## Opengrep
 
@@ -53,7 +53,7 @@ no registry rule set is bundled or fetched.
 
 ## Gitleaks
 
-- Used by: `appsec-scanners-gitleaks` (adapter `gitleaks`, import type `secret`).
+- Used by: `cybedefend-scanners/gitleaks` (adapter `gitleaks`, import type `secret`).
 - Version: 8.30.1, built from source in the image (`images/gitleaks/Dockerfile`):
   the Go module `github.com/zricethezav/gitleaks/v8@v8.30.1` (tag commit
   `83d9cd684c87d95d656c1458ef04895a7f1cbd8e`), fetched from the Go module
@@ -94,7 +94,7 @@ no registry rule set is bundled or fetched.
 
 ## Trivy
 
-- **Images:** `appsec-scanners-trivy-config`, `appsec-scanners-trivy-fs`, `appsec-scanners-trivy-image`.
+- **Images:** `cybedefend-scanners/trivy-config`, `cybedefend-scanners/trivy-fs`, `cybedefend-scanners/trivy-image`.
 - **Project:** https://github.com/aquasecurity/trivy
 - **Version:** v0.76.1, from `aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c`
   (multi-arch index; the binary `/usr/local/bin/trivy` is copied into the image).
@@ -116,8 +116,8 @@ no registry rule set is bundled or fetched.
 
 ### Vulnerability database (trivy-db)
 
-- Used by: `appsec-scanners-trivy-fs` (adapter `trivy-fs`, import type `sca`)
-  and `appsec-scanners-trivy-image` (adapter `trivy-image`, import type
+- Used by: `cybedefend-scanners/trivy-fs` (adapter `trivy-fs`, import type `sca`)
+  and `cybedefend-scanners/trivy-image` (adapter `trivy-image`, import type
   `container`). `trivy-config` downloads nothing.
 - Neither image bakes a database: at each run Trivy downloads its
   vulnerability database from `mirror.gcr.io/aquasec/trivy-db`, then
@@ -133,7 +133,7 @@ no registry rule set is bundled or fetched.
   trivy-db project. The database is not redistributed by this repository: the
   user's own run downloads it.
 
-## zizmor (image `appsec-scanners-zizmor`)
+## zizmor (image `cybedefend-scanners/zizmor`)
 
 - Version: 1.31.1, from its own image
   `ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9`

@@ -19,7 +19,7 @@ import (
 )
 
 // zizmorImage is the tag `make images` gives the zizmor image.
-const zizmorImage = "appsec-scanners-zizmor:dev"
+const zizmorImage = "cybedefend-scanners/zizmor:dev"
 
 // zizmorUpload is one request the inline import API received.
 type zizmorUpload struct {

@@ -61,7 +61,7 @@ func TestReadmeNamesEveryAdapter(t *testing.T) {
 			continue
 		}
 		for _, want := range []string{
-			"`ghcr.io/cybedefend/appsec-scanners-" + name + "`",
+			"`ghcr.io/cybedefend/cybedefend-scanners/" + name + "`",
 			adapterTools[name],
 			"`" + typ + "`",
 		} {
@@ -99,7 +99,7 @@ func TestReadmeSaysCommunityEditionOnlyFirst(t *testing.T) {
 var cloudAsTarget = []string{"or CybeDefend Cloud", "Cloud accepts", "on Cloud,", "Cloud refuses them", "## CybeDefend Cloud"}
 
 func TestNoTextPresentsCloudAsAnUploadTarget(t *testing.T) {
-	files := []string{"README.md", "CONTRIBUTING.md", "SECURITY.md", "action.yml", "templates/gitlab/appsec-scanners.gitlab-ci.yml"}
+	files := []string{"README.md", "CONTRIBUTING.md", "SECURITY.md", "action.yml", "templates/gitlab/cybedefend-scanners.gitlab-ci.yml"}
 	for _, dir := range []string{"examples", "rules"} {
 		err := filepath.WalkDir(filepath.Join(root, dir), func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
@@ -121,7 +121,7 @@ func TestNoTextPresentsCloudAsAnUploadTarget(t *testing.T) {
 			}
 		}
 	}
-	for _, f := range []string{"action.yml", "templates/gitlab/appsec-scanners.gitlab-ci.yml", "CONTRIBUTING.md"} {
+	for _, f := range []string{"action.yml", "templates/gitlab/cybedefend-scanners.gitlab-ci.yml", "CONTRIBUTING.md"} {
 		text := strings.Join(strings.Fields(string(read(t, f))), " ")
 		if !strings.Contains(text, "Community Edition instance") {
 			t.Errorf("%s does not say the results go to a Community Edition instance", f)
@@ -159,7 +159,7 @@ func TestThirdPartyNoticesListEveryTool(t *testing.T) {
 		}
 	}
 	for name, tool := range adapterTools {
-		if !strings.Contains(notices, "`appsec-scanners-"+name+"`") {
+		if !strings.Contains(notices, "`cybedefend-scanners/"+name+"`") {
 			t.Errorf("THIRD_PARTY_NOTICES.md does not name the image of %s (%s)", name, tool)
 		}
 	}
@@ -282,9 +282,9 @@ func TestRepositoryIsCybedefendScanners(t *testing.T) {
 	if !strings.HasPrefix(string(read(t, "go.mod")), "module github.com/cybedefend/cybedefend-scanners\n") {
 		t.Error("go.mod does not declare github.com/cybedefend/cybedefend-scanners")
 	}
-	for _, f := range []string{"README.md", "examples/gitlab/.gitlab-ci.yml", "templates/gitlab/appsec-scanners.gitlab-ci.yml"} {
-		if strings.Contains(string(read(t, f)), "CybeDefend/appsec-scanners") {
-			t.Errorf("%s names the repository CybeDefend/appsec-scanners", f)
+	for _, f := range []string{"README.md", "examples/gitlab/.gitlab-ci.yml", "templates/gitlab/cybedefend-scanners.gitlab-ci.yml"} {
+		if strings.Contains(string(read(t, f)), "CybeDefend/"+formerName) {
+			t.Errorf("%s names the former repository", f)
 		}
 	}
 }
@@ -318,7 +318,7 @@ func TestExamplesNameAReleasedVersion(t *testing.T) {
 		"action.yml",
 		"examples/github/cybedefend-appsec.yml",
 		"examples/gitlab/.gitlab-ci.yml",
-		"templates/gitlab/appsec-scanners.gitlab-ci.yml",
+		"templates/gitlab/cybedefend-scanners.gitlab-ci.yml",
 	}
 	seen := 0
 	for _, f := range files {
@@ -331,5 +331,41 @@ func TestExamplesNameAReleasedVersion(t *testing.T) {
 	}
 	if seen == 0 {
 		t.Fatal("no example version found")
+	}
+}
+
+// TestImagesAreNamedAfterTheRepository: the images are
+// ghcr.io/cybedefend/cybedefend-scanners/<adapter>, named after the
+// repository. No file keeps the former image names, which no release
+// publishes.
+// formerName is built so that this file does not hold it.
+const formerName = "appsec" + "-scanners"
+
+func TestImagesAreNamedAfterTheRepository(t *testing.T) {
+	old := regexp.MustCompile(formerName + `\b`)
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			if old.MatchString(line) {
+				t.Errorf("%s names the former images: %s", path, strings.TrimSpace(line))
+				break
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

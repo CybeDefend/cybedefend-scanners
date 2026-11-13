@@ -15,5 +15,5 @@ resource "aws_security_group" "ssh_from_anywhere" {
 }
 
 resource "aws_s3_bucket" "unencrypted" {
-  bucket = "appsec-scanners-sample-unencrypted"
+  bucket = "cybedefend-scanners-sample-unencrypted"
 }

@@ -10,7 +10,7 @@ func TestOpengrepCommand(t *testing.T) {
 	argv, onStdout := Opengrep{}.Command("/src", "/tmp/o.sarif", map[string]string{})
 	want := []string{
 		"opengrep", "scan",
-		"--config", "/opt/appsec-scanners/rules/opengrep",
+		"--config", "/opt/cybedefend-scanners/rules/opengrep",
 		"--sarif", "--output", "/tmp/o.sarif",
 		"--disable-version-check",
 		"/src",

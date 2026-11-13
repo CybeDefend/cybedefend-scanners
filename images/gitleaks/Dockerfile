@@ -1,6 +1,6 @@
-# appsec-scanners-gitleaks: Gitleaks v8 (MIT) and appsec-scanner.
+# cybedefend-scanners/gitleaks: Gitleaks v8 (MIT) and appsec-scanner.
 # Build from the repository root:
-#   docker build -f images/gitleaks/Dockerfile -t appsec-scanners-gitleaks:dev .
+#   docker build -f images/gitleaks/Dockerfile -t cybedefend-scanners/gitleaks:dev .
 #
 # Pins, resolved from the registries on 2026-11-03 (multi-arch index digests):
 #   golang:1.26.10-alpine      sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308
@@ -63,7 +63,7 @@ RUN set -eu; \
     ls -R /out/licenses
 
 FROM alpine:3.22.7@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
-LABEL org.opencontainers.image.title="appsec-scanners-gitleaks" \
+LABEL org.opencontainers.image.title="cybedefend-scanners/gitleaks" \
       org.opencontainers.image.description="Gitleaks secret scan, redacted SARIF, upload to a CybeDefend Community Edition import API"
 COPY --from=gitleaks /out/gitleaks /usr/bin/gitleaks
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner

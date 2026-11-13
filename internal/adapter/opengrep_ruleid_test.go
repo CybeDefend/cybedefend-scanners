@@ -84,7 +84,7 @@ func TestOpengrepGivesThePlainRuleIDOfTheBundledRules(t *testing.T) {
 		t.Errorf("RewriteSARIF = %d, want 3", n)
 	}
 	got := ruleIDs(t, l, 0)
-	wantRules := []string{"python-eval", "custom.rules.no-md5", "plain-rule", "opt.appsec-scanners.rules.opengrepx.other"}
+	wantRules := []string{"python-eval", "custom.rules.no-md5", "plain-rule", "opt.cybedefend-scanners.rules.opengrepx.other"}
 	if !equal(got.rules, wantRules) {
 		t.Errorf("rules = %q, want %q", got.rules, wantRules)
 	}
@@ -95,20 +95,20 @@ func TestOpengrepGivesThePlainRuleIDOfTheBundledRules(t *testing.T) {
 		t.Errorf("rule refs = %q, want [python-eval]", got.refs)
 	}
 	other := ruleIDs(t, l, 1)
-	if !equal(other.rules, []string{"opt.appsec-scanners.rules.opengrep.python-eval"}) ||
-		!equal(other.results, []string{"opt.appsec-scanners.rules.opengrep.python-eval"}) {
+	if !equal(other.rules, []string{"opt.cybedefend-scanners.rules.opengrep.python-eval"}) ||
+		!equal(other.results, []string{"opt.cybedefend-scanners.rules.opengrep.python-eval"}) {
 		t.Errorf("the run of another tool was changed: %+v", other)
 	}
 }
 
 func TestOpengrepGivesThePlainRuleIDOfACustomConfigDir(t *testing.T) {
 	l := opengrepFixture(t)
-	env := map[string]string{OpengrepConfigEnv: "/custom/rules/, /opt/appsec-scanners/rules/opengrep"}
+	env := map[string]string{OpengrepConfigEnv: "/custom/rules/, /opt/cybedefend-scanners/rules/opengrep"}
 	if n := (Opengrep{}).RewriteSARIF(l, "/src", env); n != 5 {
 		t.Errorf("RewriteSARIF = %d, want 5", n)
 	}
 	got := ruleIDs(t, l, 0)
-	want := []string{"python-eval", "no-md5", "plain-rule", "opt.appsec-scanners.rules.opengrepx.other"}
+	want := []string{"python-eval", "no-md5", "plain-rule", "opt.cybedefend-scanners.rules.opengrepx.other"}
 	if !equal(got.rules, want) || !equal(got.results, want) {
 		t.Errorf("rules = %q, ruleIds = %q, want %q", got.rules, got.results, want)
 	}
@@ -120,7 +120,7 @@ func TestOpengrepOverrideReplacesTheBundledPrefix(t *testing.T) {
 	l := opengrepFixture(t)
 	(Opengrep{}).RewriteSARIF(l, "/src", map[string]string{OpengrepConfigEnv: "/custom/rules"})
 	got := ruleIDs(t, l, 0)
-	want := []string{"opt.appsec-scanners.rules.opengrep.python-eval", "no-md5", "plain-rule", "opt.appsec-scanners.rules.opengrepx.other"}
+	want := []string{"opt.cybedefend-scanners.rules.opengrep.python-eval", "no-md5", "plain-rule", "opt.cybedefend-scanners.rules.opengrepx.other"}
 	if !equal(got.results, want) {
 		t.Errorf("ruleIds = %q, want %q", got.results, want)
 	}
@@ -131,8 +131,8 @@ func TestOpengrepRuleIDPrefixForms(t *testing.T) {
 		config, src string
 		want        []string
 	}{
-		{"/opt/appsec-scanners/rules/opengrep", "/src", []string{"opt.appsec-scanners.rules.opengrep"}},
-		{"/opt/appsec-scanners/rules/opengrep/python-eval.yaml", "/src", []string{"opt.appsec-scanners.rules.opengrep"}},
+		{"/opt/cybedefend-scanners/rules/opengrep", "/src", []string{"opt.cybedefend-scanners.rules.opengrep"}},
+		{"/opt/cybedefend-scanners/rules/opengrep/python-eval.yaml", "/src", []string{"opt.cybedefend-scanners.rules.opengrep"}},
 		// Opengrep runs in the source directory: a rule set under it is
 		// named relative to it.
 		{"/src/.rules", "/src", []string{"src..rules", "rules"}},

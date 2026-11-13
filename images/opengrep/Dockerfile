@@ -1,4 +1,4 @@
-# appsec-scanners-opengrep: Opengrep (LGPL-2.1) with CybeDefend's own rules.
+# cybedefend-scanners/opengrep: Opengrep (LGPL-2.1) with CybeDefend's own rules.
 # Build from the repository root: docker build -f images/opengrep/Dockerfile .
 
 # golang:1.26.10-alpine (multi-arch index)
@@ -38,14 +38,14 @@ LABEL org.opencontainers.image.licenses="Apache-2.0 AND BSD-3-Clause AND LGPL-2.
 COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md /usr/share/licenses/cybedefend-scanners/
 COPY licenses/go /usr/share/licenses/cybedefend-scanners/go/
 COPY licenses/opengrep /usr/share/licenses/cybedefend-scanners/opengrep/
-COPY rules/opengrep /opt/appsec-scanners/rules/opengrep
+COPY rules/opengrep /opt/cybedefend-scanners/rules/opengrep
 # The release binary is a one-file bundle that unpacks itself (244 MB) under
 # XDG_CACHE_HOME, then runs from there. Unpacked once here, root-owned and
 # read-only for uid 65532: a run writes none of it, and a noexec tmpfs at
 # /tmp/appsec-scanner (Docker's --tmpfs default) does not stop it.
-ENV XDG_CACHE_HOME=/opt/appsec-scanners/opengrep-cache
-RUN XDG_CACHE_HOME=/opt/appsec-scanners/opengrep-cache opengrep --version > /dev/null \
-    && chmod -R a+rX,go-w /opt/appsec-scanners/opengrep-cache
+ENV XDG_CACHE_HOME=/opt/cybedefend-scanners/opengrep-cache
+RUN XDG_CACHE_HOME=/opt/cybedefend-scanners/opengrep-cache opengrep --version > /dev/null \
+    && chmod -R a+rX,go-w /opt/cybedefend-scanners/opengrep-cache
 # The default --out (/tmp/appsec-scanner/results.sarif) is written by uid
 # 65532, with the tools' HOME and TMPDIR under it: those three empty
 # directories only are handed to it, nothing recursive.

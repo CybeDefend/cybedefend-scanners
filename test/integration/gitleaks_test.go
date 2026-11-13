@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	gitleaksImage     = "appsec-scanners-gitleaks:dev"
+	gitleaksImage     = "cybedefend-scanners/gitleaks:dev"
 	gitleaksProjectID = "3f8c2a1e-7b4d-4c9e-9a6f-0d1e2f3a4b5c"
 	gitleaksToken     = "cdp_integration-test-token"
 )

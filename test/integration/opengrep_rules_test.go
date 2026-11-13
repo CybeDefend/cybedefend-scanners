@@ -21,7 +21,7 @@ func TestOpengrepRulesPassTheirOwnTests(t *testing.T) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "--network", "none",
 		"--entrypoint", "opengrep", image,
-		"scan", "--test", "--disable-version-check", "/opt/appsec-scanners/rules/opengrep")
+		"scan", "--test", "--disable-version-check", "/opt/cybedefend-scanners/rules/opengrep")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		var exitErr *exec.ExitError

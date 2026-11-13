@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           make images
           for a in opengrep gitleaks trivy-config zizmor trivy-fs trivy-image; do
-            docker tag "appsec-scanners-$a:dev" "ghcr.io/cybedefend/appsec-scanners-$a:dev"
+            docker tag "cybedefend-scanners/$a:dev" "ghcr.io/cybedefend/cybedefend-scanners/$a:dev"
           done
 
       - name: Build the sample image
@@ -48,7 +48,7 @@ jobs:
           cp testdata/samples/sca-npm/package.json testdata/samples/sca-npm/package-lock.json "$ctx/"
           mkdir -p "$ctx/node_modules/lodash"
           echo '{"name":"lodash","version":"4.17.20","license":"MIT"}' > "$ctx/node_modules/lodash/package.json"
-          docker build -t appsec-scanners-sample:test "$ctx"
+          docker build -t cybedefend-scanners-sample:test "$ctx"
 
       - name: Start the fake import API
         run: |
@@ -106,7 +106,7 @@ jobs:
       - uses: ./
         with:
           scanner: trivy-image
-          image: appsec-scanners-sample:test
+          image: cybedefend-scanners-sample:test
           project-id: 00000000-0000-4000-8000-000000000001
           api-url: http://host.docker.internal:8080
           token: test-token
@@ -128,7 +128,7 @@ jobs:
           test "$(jq length "$dump")" -eq 6
           test "$(jq -r '[.[].Type] | sort | join(",")' "$dump")" = "cicd,container,iac,sast,sca,secret"
           test "$(jq -r '[.[] | select(.Format != "sarif" or .ProjectID != "00000000-0000-4000-8000-000000000001" or .Branch == "")] | length' "$dump")" -eq 0
-          test "$(jq -r '.[] | select(.Type == "container") | .Image' "$dump")" = "appsec-scanners-sample:test"
+          test "$(jq -r '.[] | select(.Type == "container") | .Image' "$dump")" = "cybedefend-scanners-sample:test"
           test "$(jq -r '[.[] | select(.Type != "container") | select(.Image != "" or (.Fields | index("image")))] | length' "$dump")" -eq 0
           test "$(jq -r '[.[] | select(.UserAgent | startswith("appsec-scanner/") | not)] | length' "$dump")" -eq 0
           echo "six uploads: sast, secret, iac, cicd, sca and container, image on the container one only"

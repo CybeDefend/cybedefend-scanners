@@ -91,7 +91,7 @@ func TestValidImage(t *testing.T) {
 		"alpine",
 		"ghcr.io/acme/api:1.4.2",
 		"registry.example:5000/team/api@sha256:" + strings.Repeat("a", 64),
-		"appsec-scanners-sample:test",
+		"cybedefend-scanners-sample:test",
 	} {
 		if !ValidImage(ref) {
 			t.Errorf("ValidImage(%q) = false, want true", ref)

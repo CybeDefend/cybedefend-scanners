@@ -2,7 +2,7 @@ name: Release
 
 # Runs only when a maintainer pushes a vMAJOR.MINOR.PATCH tag. For each adapter it
 # builds the image for linux/amd64, runs that adapter's integration tests on
-# it, then pushes ghcr.io/cybedefend/appsec-scanners-<adapter> for linux/amd64
+# it, then pushes ghcr.io/cybedefend/cybedefend-scanners/<adapter> for linux/amd64
 # and linux/arm64 under :<version>, :<major> and :latest (<version> is the tag
 # without its leading v). Once the six images are pushed, it creates the GitHub
 # release with their digests.
@@ -80,7 +80,7 @@ jobs:
           file: images/${{ matrix.adapter }}/Dockerfile
           platforms: linux/amd64
           build-args: VERSION=${{ steps.meta.outputs.version }}
-          tags: appsec-scanners-${{ matrix.adapter }}:dev
+          tags: cybedefend-scanners/${{ matrix.adapter }}:dev
           load: 'true'
 
       - name: Integration tests on the amd64 image
@@ -105,9 +105,9 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: VERSION=${{ steps.meta.outputs.version }}
           tags: |
-            ghcr.io/cybedefend/appsec-scanners-${{ matrix.adapter }}:${{ steps.meta.outputs.version }}
-            ghcr.io/cybedefend/appsec-scanners-${{ matrix.adapter }}:${{ steps.meta.outputs.major }}
-            ghcr.io/cybedefend/appsec-scanners-${{ matrix.adapter }}:latest
+            ghcr.io/cybedefend/cybedefend-scanners/${{ matrix.adapter }}:${{ steps.meta.outputs.version }}
+            ghcr.io/cybedefend/cybedefend-scanners/${{ matrix.adapter }}:${{ steps.meta.outputs.major }}
+            ghcr.io/cybedefend/cybedefend-scanners/${{ matrix.adapter }}:latest
           push: 'true'
 
       - name: Record the digest
@@ -157,7 +157,7 @@ jobs:
             echo "|---|---|---|"
             for a in opengrep gitleaks trivy-config zizmor trivy-fs trivy-image; do
               digest="$(cat "$RUNNER_TEMP/digests/$a")"
-              echo "| \`$a\` | \`ghcr.io/cybedefend/appsec-scanners-$a:$version\` | \`$digest\` |"
+              echo "| \`$a\` | \`ghcr.io/cybedefend/cybedefend-scanners/$a:$version\` | \`$digest\` |"
             done
           } > "$notes"
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
