@@ -148,10 +148,7 @@ func TestTrivyFsImageOnNpmSample(t *testing.T) {
 	if !zeroDropped.MatchString(output) {
 		t.Errorf("the normalise report did not log 0 dropped:\n%s", output)
 	}
-	raw, err := os.ReadFile(filepath.Join(out, "results.sarif"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := readScannerOutput(t, trivyFsImage, out, "results.sarif")
 	assertLodashFinding(t, raw)
 }
 

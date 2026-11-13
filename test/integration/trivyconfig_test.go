@@ -38,10 +38,7 @@ func TestTrivyConfigImageOffline(t *testing.T) {
 		t.Fatalf("docker run: %v\n%s", err, out)
 	}
 
-	data, err := os.ReadFile(filepath.Join(outDir, "results.sarif"))
-	if err != nil {
-		t.Fatalf("read the SARIF: %v\n%s", err, out)
-	}
+	data := readScannerOutput(t, trivyConfigImage, outDir, "results.sarif")
 	results, rulesWithSeverity := tcResults(t, data)
 	tcExpectResult(t, results, regexp.MustCompile(`(?i)aws-?0107`), "main.tf")
 	tcExpectResult(t, results, regexp.MustCompile(`(?i)ds-?0002`), "Dockerfile")

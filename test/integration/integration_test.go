@@ -193,3 +193,21 @@ func sarifResults(t *testing.T, data []byte) []sarifResult {
 	}
 	return all
 }
+
+// readScannerOutput reads a file the scanner wrote into dir, mounted at /out.
+// The scanner writes it as uid 65532 with mode 0600, as a SARIF may hold
+// sensitive findings: on Linux the host's user cannot open it, so it is read
+// from a container of the same image, as that user.
+func readScannerOutput(t *testing.T, image, dir, name string) []byte {
+	t.Helper()
+	out, err := exec.Command("docker", "run", "--rm", "--network", "none",
+		"-v", dir+":/out:ro", "--entrypoint", "cat", image, "/out/"+name).Output()
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			t.Fatalf("read /out/%s from %s: %v\n%s", name, image, err, ee.Stderr)
+		}
+		t.Fatalf("read /out/%s from %s: %v", name, image, err)
+	}
+	return out
+}
