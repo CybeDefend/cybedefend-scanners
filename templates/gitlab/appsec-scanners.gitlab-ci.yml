@@ -27,7 +27,7 @@
 # GitLab registry credentials.
 
 variables:
-  # The scanner image version: a release such as 1.2.0, or its major, 1.
+  # The scanner image version: a release such as 1.0.0, or its major, 1.
   CYBEDEFEND_SCANNERS_VERSION: "1"
 
 .cybedefend-sast:

@@ -303,3 +303,33 @@ func TestThirdPartyNoticesCoverRedistribution(t *testing.T) {
 		t.Error("THIRD_PARTY_NOTICES.md says every tool is distributed unmodified; gitleaks is rebuilt with raised dependencies")
 	}
 }
+
+// releasedExampleVersion is the release the documentation shows as its
+// example: a version that exists, so that a copied example pulls.
+const releasedExampleVersion = "1.0.0"
+
+func TestExamplesNameAReleasedVersion(t *testing.T) {
+	// The forms that name a scanners release: "such as 1.0.0", "version:
+	// 1.0.0", "(`:1.0.0`)", "cybedefend-scanners@<full commit sha> # v1.0.0" and
+	// "cybedefend-scanners/v1.0.0/". Other tools' versions are not matched.
+	semver := regexp.MustCompile("(?:such as |version: |`:|cybedefend-scanners@[^#\\n]+# v|cybedefend-scanners/v)(\\d+\\.\\d+\\.\\d+)")
+	files := []string{
+		"README.md",
+		"action.yml",
+		"examples/github/cybedefend-appsec.yml",
+		"examples/gitlab/.gitlab-ci.yml",
+		"templates/gitlab/appsec-scanners.gitlab-ci.yml",
+	}
+	seen := 0
+	for _, f := range files {
+		for _, m := range semver.FindAllStringSubmatch(string(read(t, f)), -1) {
+			seen++
+			if m[1] != releasedExampleVersion {
+				t.Errorf("%s names version %s (%q), want the released %s", f, m[1], m[0], releasedExampleVersion)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no example version found")
+	}
+}

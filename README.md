@@ -23,7 +23,7 @@ the images.
 | `trivy-image` | `ghcr.io/cybedefend/appsec-scanners-trivy-image` | Trivy | `container` | Downloads Trivy's vulnerability database at each run |
 
 Images are published for `linux/amd64` and `linux/arm64`, tagged with the
-release version without its leading `v` (`:1.2.0`), its major (`:1`) and
+release version without its leading `v` (`:1.0.0`), its major (`:1`) and
 `:latest`. They run as uid 65532, and on a read-only root filesystem when
 `/tmp/appsec-scanner` is writable (an `emptyDir`, or `--read-only --tmpfs
 /tmp/appsec-scanner:uid=65532,gid=65532`): the tools' `HOME` and `TMPDIR`
@@ -93,10 +93,10 @@ normalised SARIF to `./cybedefend-<scanner>.sarif`.
 - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
   with:
     persist-credentials: false
-- uses: CybeDefend/cybedefend-scanners@<full commit sha> # v1.2.0
+- uses: CybeDefend/cybedefend-scanners@<full commit sha> # v1.0.0
   with:
     scanner: opengrep
-    version: 1.2.0
+    version: 1.0.0
     api-url: ${{ vars.CYBEDEFEND_API_URL }}
     project-id: ${{ vars.CYBEDEFEND_PROJECT_ID }}
     token: ${{ secrets.CYBEDEFEND_TOKEN }}
@@ -117,7 +117,7 @@ workflow with every scanner is in
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/CybeDefend/cybedefend-scanners/v1.2.0/templates/gitlab/appsec-scanners.gitlab-ci.yml
+  - remote: https://raw.githubusercontent.com/CybeDefend/cybedefend-scanners/v1.0.0/templates/gitlab/appsec-scanners.gitlab-ci.yml
 
 sast:
   extends: .cybedefend-sast
