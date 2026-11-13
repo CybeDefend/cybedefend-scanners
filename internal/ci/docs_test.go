@@ -288,3 +288,18 @@ func TestRepositoryIsCybedefendScanners(t *testing.T) {
 		}
 	}
 }
+
+// TestThirdPartyNoticesCoverRedistribution: the notices say where an image
+// keeps the licences, offer Opengrep's source as LGPL-2.1 section 6 asks, and
+// do not call the rebuilt gitleaks unmodified.
+func TestThirdPartyNoticesCoverRedistribution(t *testing.T) {
+	notices := string(read(t, "THIRD_PARTY_NOTICES.md"))
+	for _, want := range []string{"/usr/share/licenses/cybedefend-scanners", "written offer", "opensource@cybedefend.com"} {
+		if !strings.Contains(notices, want) {
+			t.Errorf("THIRD_PARTY_NOTICES.md does not say %q", want)
+		}
+	}
+	if strings.Contains(notices, "distributed unmodified") {
+		t.Error("THIRD_PARTY_NOTICES.md says every tool is distributed unmodified; gitleaks is rebuilt with raised dependencies")
+	}
+}

@@ -482,3 +482,122 @@ func TestImagesShipHomeAndTmpdir(t *testing.T) {
 		}
 	}
 }
+
+// licenceDir is where every image keeps the licences of what it ships.
+const licenceDir = "/usr/share/licenses/cybedefend-scanners"
+
+// imageLicences gives, per adapter, the directory of licenses/ that holds its
+// tool's licence and the SPDX expression of the image's own code: our
+// Apache-2.0 program, its Go runtime (BSD-3-Clause) and the tool.
+var imageLicences = map[string]struct{ tool, spdx string }{
+	"opengrep":     {"opengrep", "Apache-2.0 AND BSD-3-Clause AND LGPL-2.1-only"},
+	"gitleaks":     {"gitleaks", "Apache-2.0 AND BSD-3-Clause AND MIT"},
+	"trivy-config": {"trivy", "Apache-2.0 AND BSD-3-Clause"},
+	"trivy-fs":     {"trivy", "Apache-2.0 AND BSD-3-Clause"},
+	"trivy-image":  {"trivy", "Apache-2.0 AND BSD-3-Clause"},
+	"zizmor":       {"zizmor", "Apache-2.0 AND BSD-3-Clause AND MIT"},
+}
+
+// finalStage returns the instructions after the last FROM.
+func finalStage(ins []instruction) []instruction {
+	last := -1
+	for i, in := range ins {
+		if in.keyword == "FROM" {
+			last = i
+		}
+	}
+	return ins[last+1:]
+}
+
+// TestImagesShipTheLicences: an image redistributes our program, the Go
+// runtime compiled into it and an upstream tool, so it carries each one's
+// licence text (MIT, BSD and Apache-2.0 require it; Apache-2.0 also the
+// NOTICE; LGPL-2.1 the licence and access to the source) and says so in its
+// licenses label.
+func TestImagesShipTheLicences(t *testing.T) {
+	byAdapter := dockerfiles(t)
+	for adapter := range imageLicences {
+		if _, ok := byAdapter[adapter]; !ok {
+			t.Errorf("no images/%s/Dockerfile", adapter)
+		}
+	}
+	for adapter, path := range byAdapter {
+		want, ok := imageLicences[adapter]
+		if !ok {
+			t.Errorf("%s: no expected licences for adapter %q", path, adapter)
+			continue
+		}
+		var copies, labels strings.Builder
+		for _, in := range finalStage(parse(t, path)) {
+			switch in.keyword {
+			case "COPY":
+				copies.WriteString(in.args + "\n")
+			case "LABEL":
+				labels.WriteString(in.args + "\n")
+			}
+		}
+		for _, c := range []string{
+			"LICENSE NOTICE THIRD_PARTY_NOTICES.md " + licenceDir + "/",
+			"licenses/go " + licenceDir + "/go/",
+			"licenses/" + want.tool + " " + licenceDir + "/" + want.tool + "/",
+		} {
+			if !strings.Contains(copies.String(), c) {
+				t.Errorf("%s: the final stage does not COPY %s", path, c)
+			}
+		}
+		if l := `org.opencontainers.image.licenses="` + want.spdx + `"`; !strings.Contains(labels.String(), l) {
+			t.Errorf("%s: the final stage does not LABEL %s", path, l)
+		}
+	}
+}
+
+// TestLicenceTextsArePresent: the texts the images copy are in the
+// repository, taken from each project at the version the images ship.
+func TestLicenceTextsArePresent(t *testing.T) {
+	want := map[string]string{
+		"licenses/opengrep/LICENSE": "GNU LESSER GENERAL PUBLIC LICENSE",
+		"licenses/gitleaks/LICENSE": "Copyright (c) 2019 Zachary Rice",
+		"licenses/trivy/LICENSE":    "Apache License",
+		"licenses/trivy/NOTICE":     "Aqua Security",
+		"licenses/zizmor/LICENSE":   "William Woodruff",
+		"licenses/go/LICENSE":       "The Go Authors",
+		"licenses/go/PATENTS":       "Additional IP Rights Grant (Patents)",
+	}
+	for f, s := range want {
+		data, err := os.ReadFile(filepath.Join(root, f))
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+		if !strings.Contains(string(data), s) {
+			t.Errorf("%s does not contain %q", f, s)
+		}
+	}
+}
+
+// TestGitleaksShipsItsModulesLicences: gitleaks is rebuilt from source with
+// raised dependencies, so the image carries the licence of every module
+// compiled into it, collected at build time, and the build fails when one
+// has none.
+func TestGitleaksShipsItsModulesLicences(t *testing.T) {
+	path := dockerfiles(t)["gitleaks"]
+	ins := parse(t, path)
+	collected := false
+	for _, in := range ins {
+		if in.keyword == "RUN" && strings.Contains(in.args, "go list -deps") && strings.Contains(in.args, "/out/licenses") {
+			collected = true
+		}
+	}
+	if !collected {
+		t.Errorf("%s: no build step collects the modules' licences into /out/licenses", path)
+	}
+	copied := false
+	for _, in := range finalStage(ins) {
+		if in.keyword == "COPY" && strings.Contains(in.args, "/out/licenses "+licenceDir+"/gitleaks-modules/") {
+			copied = true
+		}
+	}
+	if !copied {
+		t.Errorf("%s: the final stage does not COPY the modules' licences to %s/gitleaks-modules/", path, licenceDir)
+	}
+}
