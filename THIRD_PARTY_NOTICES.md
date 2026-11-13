@@ -1,8 +1,28 @@
 # Third-party notices
 
-The images of this repository bundle the open-source tools below. Each is
-distributed unmodified, under its own licence; the `appsec-scanner` program
-around it is Apache-2.0.
+The images of this repository bundle the open-source tools below, each under
+its own licence. Opengrep, Trivy and zizmor are the upstream release binaries,
+unchanged; gitleaks is built from its released source with some dependencies
+raised to fixed versions (below). The `appsec-scanner` program around them is
+Apache-2.0, and the Go runtime compiled into it is BSD-3-Clause.
+
+## Licences in the images
+
+Every image keeps the licence texts of what it redistributes under
+`/usr/share/licenses/cybedefend-scanners/`:
+
+- `LICENSE`, `NOTICE` and this file, for `appsec-scanner`;
+- `go/` (`LICENSE`, `PATENTS`), for the Go runtime compiled into
+  `appsec-scanner`;
+- the tool's directory: `opengrep/`, `gitleaks/`, `trivy/` (`LICENSE`,
+  `NOTICE`) or `zizmor/`, copied from [`licenses/`](licenses/), each taken from
+  the project at the version the image ships;
+- in the gitleaks image, `gitleaks-modules/<module>@<version>/`: the licence
+  files of every Go module compiled into gitleaks, collected at build time.
+
+Each image's `org.opencontainers.image.licenses` label gives the same in SPDX
+form. The packages of the base images (Alpine, Debian, Wolfi) keep their
+distributions' own licence files and source.
 
 | Image | Tool | Version | Licence | Source | Release asset (sha256) |
 |---|---|---|---|---|---|
@@ -15,10 +35,21 @@ around it is Apache-2.0.
 
 ## Opengrep
 
-Opengrep is licensed under the GNU Lesser General Public License v2.1. Its
-source code, and the licence text, are at https://github.com/opengrep/opengrep
-(tag `v1.33.1`). The image runs it with CybeDefend's own rules only
-(`rules/opengrep/`); no registry rule set is bundled or fetched.
+Opengrep is licensed under the GNU Lesser General Public License v2.1, whose
+text the image ships (`/usr/share/licenses/cybedefend-scanners/opengrep/LICENSE`).
+It runs as a separate program: `appsec-scanner` starts it and reads its SARIF
+output, and links none of its code. Its source code is at
+https://github.com/opengrep/opengrep (tag `v1.33.1`).
+
+**Source on request** (a written offer, as LGPL-2.1 section 6(c) allows). For at least three years after we last distribute an image
+holding Opengrep, CybeDefend will give anyone who asks the complete
+corresponding source code of the Opengrep version in that image, on a medium
+customarily used for software interchange, for no more than the cost of
+providing it. Write to opensource@cybedefend.com and name the image and its
+version.
+
+The image runs Opengrep with CybeDefend's own rules only (`rules/opengrep/`);
+no registry rule set is bundled or fetched.
 
 ## Gitleaks
 

@@ -27,6 +27,12 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
+# What the image redistributes, each with its licence: our program, the Go
+# runtime compiled into it, and the tool (THIRD_PARTY_NOTICES.md).
+LABEL org.opencontainers.image.licenses="Apache-2.0 AND BSD-3-Clause"
+COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md /usr/share/licenses/cybedefend-scanners/
+COPY licenses/go /usr/share/licenses/cybedefend-scanners/go/
+COPY licenses/trivy /usr/share/licenses/cybedefend-scanners/trivy/
 # The two directories uid 65532 writes: the default --out
 # (/tmp/appsec-scanner/results.sarif), Trivy's cache, HOME and TMPDIR.
 # Nothing else is chowned.

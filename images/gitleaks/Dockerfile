@@ -47,14 +47,34 @@ RUN set -eu; \
     go mod verify; \
     go list -m golang.org/x/crypto golang.org/x/text golang.org/x/sys github.com/klauspost/compress github.com/ulikunitz/xz github.com/nwaples/rardecode/v2; \
     CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X=github.com/zricethezav/gitleaks/v8/version.Version=${GITLEAKS_VERSION}" -o /out/gitleaks .
+# The licence files of every module compiled into gitleaks, one directory per
+# module@version under /out/licenses. A module without one fails the build:
+# its licence would otherwise not ship with the binary.
+RUN set -eu; \
+    go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}@{{.Version}} {{.Dir}}{{end}}{{end}}' . | sort -u > /tmp/modules; \
+    test -s /tmp/modules; \
+    while read -r mod dir; do \
+      dest="/out/licenses/$mod"; mkdir -p "$dest"; found=0; \
+      for f in "$dir"/LICENSE* "$dir"/LICENCE* "$dir"/COPYING* "$dir"/NOTICE* "$dir"/PATENTS*; do \
+        if [ -f "$f" ]; then cp "$f" "$dest/"; found=1; fi; \
+      done; \
+      if [ "$found" = 0 ]; then echo "no licence file in $mod ($dir)" >&2; exit 1; fi; \
+    done < /tmp/modules; \
+    ls -R /out/licenses
 
 FROM alpine:3.22.7@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
 LABEL org.opencontainers.image.title="appsec-scanners-gitleaks" \
-      org.opencontainers.image.description="Gitleaks secret scan, redacted SARIF, upload to a CybeDefend Community Edition import API" \
-      org.opencontainers.image.licenses="Apache-2.0"
+      org.opencontainers.image.description="Gitleaks secret scan, redacted SARIF, upload to a CybeDefend Community Edition import API"
 COPY --from=gitleaks /out/gitleaks /usr/bin/gitleaks
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
-COPY LICENSE NOTICE /usr/share/doc/appsec-scanners/
+# What the image redistributes, each with its licence: our program, the Go
+# runtime compiled into it, gitleaks and the modules compiled into it
+# (THIRD_PARTY_NOTICES.md).
+LABEL org.opencontainers.image.licenses="Apache-2.0 AND BSD-3-Clause AND MIT"
+COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md /usr/share/licenses/cybedefend-scanners/
+COPY licenses/go /usr/share/licenses/cybedefend-scanners/go/
+COPY licenses/gitleaks /usr/share/licenses/cybedefend-scanners/gitleaks/
+COPY --from=gitleaks /out/licenses /usr/share/licenses/cybedefend-scanners/gitleaks-modules/
 # The default --out (/tmp/appsec-scanner/results.sarif) is written by uid
 # 65532, with the tools' HOME and TMPDIR under it: those three empty
 # directories only are handed to it, nothing recursive.

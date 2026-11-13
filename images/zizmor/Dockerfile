@@ -19,6 +19,12 @@ RUN mkdir -p /out/tmp/appsec-scanner/home /out/tmp/appsec-scanner/tmp
 # of the 1.31.1 release.
 FROM ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
+# What the image redistributes, each with its licence: our program, the Go
+# runtime compiled into it, and the tool (THIRD_PARTY_NOTICES.md).
+LABEL org.opencontainers.image.licenses="Apache-2.0 AND BSD-3-Clause AND MIT"
+COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md /usr/share/licenses/cybedefend-scanners/
+COPY licenses/go /usr/share/licenses/cybedefend-scanners/go/
+COPY licenses/zizmor /usr/share/licenses/cybedefend-scanners/zizmor/
 # The default --out (/tmp/appsec-scanner/results.sarif) is written by uid
 # 65532: the appsec-scanner directory (with empty home/ and tmp/) is copied in,
 # owned by it, so the final stage runs no command in the tool's own image.
