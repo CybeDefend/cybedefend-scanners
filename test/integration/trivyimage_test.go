@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	trivyImageImage = "appsec-scanners-trivy-image:dev"
-	sampleImage     = "appsec-scanners-sample:test"
+	trivyImageImage = "cybedefend-scanners/trivy-image:dev"
+	sampleImage     = "cybedefend-scanners-sample:test"
 )
 
 // lodashInstalled is the installed metadata of the vulnerable lodash: in an

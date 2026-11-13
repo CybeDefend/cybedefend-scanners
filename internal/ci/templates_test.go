@@ -273,7 +273,7 @@ type gitlabJob struct {
 
 func TestGitLabTemplateJobs(t *testing.T) {
 	var doc map[string]yaml.Node
-	data := read(t, "templates/gitlab/appsec-scanners.gitlab-ci.yml")
+	data := read(t, "templates/gitlab/cybedefend-scanners.gitlab-ci.yml")
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +296,7 @@ func TestGitLabTemplateJobs(t *testing.T) {
 			t.Errorf("%s: %v", job, err)
 			continue
 		}
-		if want := "ghcr.io/cybedefend/appsec-scanners-" + adapter + ":$CYBEDEFEND_SCANNERS_VERSION"; j.Image.Name != want {
+		if want := "ghcr.io/cybedefend/cybedefend-scanners/" + adapter + ":$CYBEDEFEND_SCANNERS_VERSION"; j.Image.Name != want {
 			t.Errorf("%s: image %q, want %q", job, j.Image.Name, want)
 		}
 		if len(j.Image.Entrypoint) != 1 || j.Image.Entrypoint[0] != "" {
@@ -378,7 +378,7 @@ func TestExamplesUseTheTemplates(t *testing.T) {
 	}
 
 	gl := read(t, "examples/gitlab/.gitlab-ci.yml")
-	if !strings.Contains(string(gl), "templates/gitlab/appsec-scanners.gitlab-ci.yml") {
+	if !strings.Contains(string(gl), "templates/gitlab/cybedefend-scanners.gitlab-ci.yml") {
 		t.Error("the GitLab example does not include the template")
 	}
 	var glDoc struct {
@@ -413,7 +413,7 @@ func TestSelfTestCoversEveryScanner(t *testing.T) {
 		t.Error("the self-test points the action at localhost, which the container cannot reach")
 	}
 	for _, v := range []string{"FAKE_API_TOKEN: test-token", "FAKE_API_ADDR: 0.0.0.0:8080", "api-url: http://host.docker.internal:8080", "version: dev",
-		"image: appsec-scanners-sample:test", "testdata/samples/sca-npm", "FAKE_API_DUMP"} {
+		"image: cybedefend-scanners-sample:test", "testdata/samples/sca-npm", "FAKE_API_DUMP"} {
 		if !strings.Contains(data, v) {
 			t.Errorf("the self-test does not hold %q", v)
 		}
@@ -590,7 +590,7 @@ func TestReleaseWorkflow(t *testing.T) {
 	}
 	version := "${{ steps." + vs.ID + ".outputs.version }}"
 	major := "${{ steps." + vs.ID + ".outputs.major }}"
-	repo := "ghcr.io/cybedefend/appsec-scanners-${{ matrix.adapter }}"
+	repo := "ghcr.io/cybedefend/cybedefend-scanners/${{ matrix.adapter }}"
 
 	// amd64 build loaded locally, then the integration suite, then the push.
 	load, integration, pushStep := -1, -1, -1
@@ -601,7 +601,7 @@ func TestReleaseWorkflow(t *testing.T) {
 			if s.With["platforms"] != "linux/amd64" {
 				t.Errorf("the local build is for %q, want linux/amd64", s.With["platforms"])
 			}
-			if !strings.Contains(s.With["tags"], "appsec-scanners-${{ matrix.adapter }}:dev") {
+			if !strings.Contains(s.With["tags"], "cybedefend-scanners/${{ matrix.adapter }}:dev") {
 				t.Errorf("the local build tags %q, want the tag the integration suite runs", s.With["tags"])
 			}
 			if s.With["push"] == "true" {

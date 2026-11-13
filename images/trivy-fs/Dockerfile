@@ -1,4 +1,4 @@
-# appsec-scanners-trivy-fs: Trivy vulnerability scan of a source tree (type sca).
+# cybedefend-scanners/trivy-fs: Trivy vulnerability scan of a source tree (type sca).
 # Build from the repository root: docker build -f images/trivy-fs/Dockerfile .
 #
 # The tool stage is the one images/trivy-config uses (same version, same

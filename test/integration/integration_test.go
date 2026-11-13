@@ -48,9 +48,9 @@ func requireDocker(t *testing.T) {
 }
 
 // imageName is the local tag `make images` gives an adapter's image.
-func imageName(adapter string) string { return "appsec-scanners-" + adapter + ":dev" }
+func imageName(adapter string) string { return "cybedefend-scanners/" + adapter + ":dev" }
 
-// buildImage makes sure appsec-scanners-<adapter>:dev exists, building it
+// buildImage makes sure cybedefend-scanners/<adapter>:dev exists, building it
 // from images/<adapter>/Dockerfile when `make images` did not.
 func buildImage(t *testing.T, adapter string) string {
 	t.Helper()

@@ -1,6 +1,6 @@
 # Opengrep rules
 
-The rules the `opengrep` image bundles at `/opt/appsec-scanners/rules/opengrep`.
+The rules the `opengrep` image bundles at `/opt/cybedefend-scanners/rules/opengrep`.
 Every rule here is CybeDefend's own, written from the CWE it names, under
 Apache-2.0 (`metadata.license`); no third-party rule set is copied in.
 

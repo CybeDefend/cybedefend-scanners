@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-const trivyFsImage = "appsec-scanners-trivy-fs:dev"
+const trivyFsImage = "cybedefend-scanners/trivy-fs:dev"
 
 // trivyFsSkip skips when the test cannot download Trivy's database or run docker.
 func trivyFsSkip(t *testing.T) {

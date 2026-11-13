@@ -60,7 +60,7 @@
       "columnKind": "utf16CodeUnits",
       "properties": {
         "imageName": "/out/image.tar",
-        "repoTags": ["appsec-scanners-sample:test"],
+        "repoTags": ["cybedefend-scanners-sample:test"],
         "repoDigests": [],
         "imageID": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
       }

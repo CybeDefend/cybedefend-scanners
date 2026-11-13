@@ -54,7 +54,7 @@ inputs:
     default: '.'
   version:
     description: >-
-      The scanner image version (ghcr.io/cybedefend/appsec-scanners-<scanner>:<version>).
+      The scanner image version (ghcr.io/cybedefend/cybedefend-scanners/<scanner>:<version>).
       Defaults to the tag this action is used at, without its leading v. Set it
       when the action is pinned by commit sha.
     required: false
@@ -227,7 +227,7 @@ runs:
         esac
         # The SARIF is written inside the container (uid 65532) and copied out
         # with docker cp, which gives the runner's user a file it can read.
-        args+=("ghcr.io/cybedefend/appsec-scanners-$SCANNER:$VERSION" --out "/tmp/appsec-scanner/$SARIF_OUTPUT")
+        args+=("ghcr.io/cybedefend/cybedefend-scanners/$SCANNER:$VERSION" --out "/tmp/appsec-scanner/$SARIF_OUTPUT")
         if [ "$UPLOAD" = true ]; then
           args+=(--upload)
         fi

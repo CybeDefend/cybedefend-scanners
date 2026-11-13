@@ -22,7 +22,7 @@ import (
 )
 
 // trivyConfigImage is what `make images` builds from images/trivy-config.
-const trivyConfigImage = "appsec-scanners-trivy-config:dev"
+const trivyConfigImage = "cybedefend-scanners/trivy-config:dev"
 
 // TestTrivyConfigImageOffline runs the image with no network at all: the
 // scan must work on Trivy's embedded checks alone.

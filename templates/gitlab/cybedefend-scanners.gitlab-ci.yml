@@ -4,7 +4,7 @@
 # Include this file, then extend the hidden jobs you want:
 #
 #   include:
-#     - remote: https://raw.githubusercontent.com/CybeDefend/cybedefend-scanners/<tag>/templates/gitlab/appsec-scanners.gitlab-ci.yml
+#     - remote: https://raw.githubusercontent.com/CybeDefend/cybedefend-scanners/<tag>/templates/gitlab/cybedefend-scanners.gitlab-ci.yml
 #
 #   sast:
 #     extends: .cybedefend-sast
@@ -32,7 +32,7 @@ variables:
 
 .cybedefend-sast:
   image:
-    name: ghcr.io/cybedefend/appsec-scanners-opengrep:$CYBEDEFEND_SCANNERS_VERSION
+    name: ghcr.io/cybedefend/cybedefend-scanners/opengrep:$CYBEDEFEND_SCANNERS_VERSION
     entrypoint: [""]
   variables:
     CYBEDEFEND_IMAGE: ""
@@ -44,7 +44,7 @@ variables:
 
 .cybedefend-secret:
   image:
-    name: ghcr.io/cybedefend/appsec-scanners-gitleaks:$CYBEDEFEND_SCANNERS_VERSION
+    name: ghcr.io/cybedefend/cybedefend-scanners/gitleaks:$CYBEDEFEND_SCANNERS_VERSION
     entrypoint: [""]
   variables:
     CYBEDEFEND_IMAGE: ""
@@ -56,7 +56,7 @@ variables:
 
 .cybedefend-iac:
   image:
-    name: ghcr.io/cybedefend/appsec-scanners-trivy-config:$CYBEDEFEND_SCANNERS_VERSION
+    name: ghcr.io/cybedefend/cybedefend-scanners/trivy-config:$CYBEDEFEND_SCANNERS_VERSION
     entrypoint: [""]
   variables:
     CYBEDEFEND_IMAGE: ""
@@ -68,7 +68,7 @@ variables:
 
 .cybedefend-cicd:
   image:
-    name: ghcr.io/cybedefend/appsec-scanners-zizmor:$CYBEDEFEND_SCANNERS_VERSION
+    name: ghcr.io/cybedefend/cybedefend-scanners/zizmor:$CYBEDEFEND_SCANNERS_VERSION
     entrypoint: [""]
   variables:
     CYBEDEFEND_IMAGE: ""
@@ -80,7 +80,7 @@ variables:
 
 .cybedefend-sca:
   image:
-    name: ghcr.io/cybedefend/appsec-scanners-trivy-fs:$CYBEDEFEND_SCANNERS_VERSION
+    name: ghcr.io/cybedefend/cybedefend-scanners/trivy-fs:$CYBEDEFEND_SCANNERS_VERSION
     entrypoint: [""]
   variables:
     CYBEDEFEND_IMAGE: ""
@@ -92,7 +92,7 @@ variables:
 
 .cybedefend-container:
   image:
-    name: ghcr.io/cybedefend/appsec-scanners-trivy-image:$CYBEDEFEND_SCANNERS_VERSION
+    name: ghcr.io/cybedefend/cybedefend-scanners/trivy-image:$CYBEDEFEND_SCANNERS_VERSION
     entrypoint: [""]
   variables:
     TRIVY_USERNAME: $CI_REGISTRY_USER

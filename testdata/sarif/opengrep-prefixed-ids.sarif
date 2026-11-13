@@ -4,27 +4,27 @@
     {
       "tool": { "driver": { "name": "Opengrep OSS", "semanticVersion": "1.10.0",
         "rules": [
-          { "id": "opt.appsec-scanners.rules.opengrep.python-eval", "name": "opt.appsec-scanners.rules.opengrep.python-eval",
+          { "id": "opt.cybedefend-scanners.rules.opengrep.python-eval", "name": "opt.cybedefend-scanners.rules.opengrep.python-eval",
             "defaultConfiguration": { "level": "error" }, "properties": { "security-severity": "9.8" } },
           { "id": "custom.rules.no-md5", "defaultConfiguration": { "level": "warning" } },
           { "id": "plain-rule" },
-          { "id": "opt.appsec-scanners.rules.opengrepx.other" }
+          { "id": "opt.cybedefend-scanners.rules.opengrepx.other" }
         ] } },
       "results": [
-        { "ruleId": "opt.appsec-scanners.rules.opengrep.python-eval", "ruleIndex": 0, "message": { "text": "eval" },
-          "rule": { "id": "opt.appsec-scanners.rules.opengrep.python-eval", "index": 0 },
+        { "ruleId": "opt.cybedefend-scanners.rules.opengrep.python-eval", "ruleIndex": 0, "message": { "text": "eval" },
+          "rule": { "id": "opt.cybedefend-scanners.rules.opengrep.python-eval", "index": 0 },
           "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "app.py" }, "region": { "startLine": 3 } } } ] },
         { "ruleId": "custom.rules.no-md5", "message": { "text": "md5" },
           "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "hash.py" }, "region": { "startLine": 1 } } } ] },
         { "ruleId": "plain-rule", "message": { "text": "plain" } },
-        { "ruleId": "opt.appsec-scanners.rules.opengrepx.other", "message": { "text": "sibling directory" } }
+        { "ruleId": "opt.cybedefend-scanners.rules.opengrepx.other", "message": { "text": "sibling directory" } }
       ]
     },
     {
       "tool": { "driver": { "name": "gitleaks",
-        "rules": [ { "id": "opt.appsec-scanners.rules.opengrep.python-eval" } ] } },
+        "rules": [ { "id": "opt.cybedefend-scanners.rules.opengrep.python-eval" } ] } },
       "results": [
-        { "ruleId": "opt.appsec-scanners.rules.opengrep.python-eval", "message": { "text": "another tool" } }
+        { "ruleId": "opt.cybedefend-scanners.rules.opengrep.python-eval", "message": { "text": "another tool" } }
       ]
     }
   ]

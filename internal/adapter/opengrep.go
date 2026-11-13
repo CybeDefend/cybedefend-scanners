@@ -9,7 +9,7 @@ import (
 )
 
 // DefaultOpengrepRulesDir is where the opengrep image bundles our rules.
-const DefaultOpengrepRulesDir = "/opt/appsec-scanners/rules/opengrep"
+const DefaultOpengrepRulesDir = "/opt/cybedefend-scanners/rules/opengrep"
 
 // OpengrepConfigEnv overrides the rules: a path, or several, comma-separated.
 const OpengrepConfigEnv = "OPENGREP_CONFIG"
@@ -79,7 +79,7 @@ func isRegistryConfig(c string) bool {
 // RewriteSARIF implements SARIFRewriter. Opengrep, like Semgrep, prefixes the
 // id of every rule with the dotted path of the directory of its rule file
 // (relative to its working directory when under it): the bundled python-eval
-// comes out as opt.appsec-scanners.rules.opengrep.python-eval. The platform
+// comes out as opt.cybedefend-scanners.rules.opengrep.python-eval. The platform
 // keys findings on the rule id, so the prefix of each --config this adapter
 // passed is removed from the rule ids of Opengrep's runs; any other id is kept.
 func (o Opengrep) RewriteSARIF(l *sarif.Log, src string, env map[string]string) int {

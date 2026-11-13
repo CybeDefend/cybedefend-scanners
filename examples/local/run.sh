@@ -70,7 +70,7 @@ sarif="cybedefend-$scanner.sarif"
 status=0
 docker "${args[@]}" --name "$name" -v "$src:/src:ro" \
   -e CYBEDEFEND_API_URL -e CYBEDEFEND_TOKEN -e CYBEDEFEND_PROJECT_ID -e CYBEDEFEND_BRANCH \
-  "ghcr.io/cybedefend/appsec-scanners-$scanner:$version" --out "/tmp/appsec-scanner/$sarif" ${upload[@]+"${upload[@]}"} || status=$?
+  "ghcr.io/cybedefend/cybedefend-scanners/$scanner:$version" --out "/tmp/appsec-scanner/$sarif" ${upload[@]+"${upload[@]}"} || status=$?
 
 # The SARIF is owned by the scanner's user in the container: docker cp gives a
 # copy owned by you.

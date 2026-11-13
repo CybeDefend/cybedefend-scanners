@@ -1,4 +1,4 @@
-# appsec-scanners-trivy-image: Trivy vulnerability scan of a container image (type container).
+# cybedefend-scanners/trivy-image: Trivy vulnerability scan of a container image (type container).
 # Build from the repository root: docker build -f images/trivy-image/Dockerfile .
 #
 # The tool stage is the one images/trivy-fs uses (same version, same digest).

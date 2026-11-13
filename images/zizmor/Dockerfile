@@ -1,8 +1,8 @@
-# appsec-scanners-zizmor: zizmor (MIT) audits GitHub Actions workflows, and
+# cybedefend-scanners/zizmor: zizmor (MIT) audits GitHub Actions workflows, and
 # appsec-scanner normalises its SARIF and uploads it as a `cicd` import.
 #
 # Build from the repository root:
-#   docker build -f images/zizmor/Dockerfile -t appsec-scanners-zizmor:dev .
+#   docker build -f images/zizmor/Dockerfile -t cybedefend-scanners/zizmor:dev .
 
 # Stage 1: the static appsec-scanner binary.
 FROM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build

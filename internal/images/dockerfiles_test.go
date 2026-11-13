@@ -156,12 +156,12 @@ func TestOpengrepImageBundlesOnlyOurRules(t *testing.T) {
 	text := string(data)
 	var copied bool
 	for _, in := range parse(t, path) {
-		if in.keyword == "COPY" && in.args == "rules/opengrep /opt/appsec-scanners/rules/opengrep" {
+		if in.keyword == "COPY" && in.args == "rules/opengrep /opt/cybedefend-scanners/rules/opengrep" {
 			copied = true
 		}
 	}
 	if !copied {
-		t.Error("the image does not COPY rules/opengrep /opt/appsec-scanners/rules/opengrep")
+		t.Error("the image does not COPY rules/opengrep /opt/cybedefend-scanners/rules/opengrep")
 	}
 	for _, banned := range []string{"git clone", "semgrep-rules", "opengrep-rules"} {
 		if strings.Contains(text, banned) {
@@ -421,7 +421,7 @@ func TestGoVersionIsTheSameEverywhere(t *testing.T) {
 // opengrepCache is where the image unpacks Opengrep's one-file binary at build
 // time. Unpacked at run time, it lands under HOME (/tmp/appsec-scanner/home):
 // 244 MB per run, and a tmpfs mounted noexec (Docker's default) cannot run it.
-const opengrepCache = "/opt/appsec-scanners/opengrep-cache"
+const opengrepCache = "/opt/cybedefend-scanners/opengrep-cache"
 
 func TestOpengrepIsUnpackedAtBuildTime(t *testing.T) {
 	path := filepath.Join(root, "images", "opengrep", "Dockerfile")

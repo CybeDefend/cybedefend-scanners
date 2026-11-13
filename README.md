@@ -15,12 +15,12 @@ the images.
 
 | Adapter | Image | Tool | Import type | Notes |
 |---|---|---|---|---|
-| `opengrep` | `ghcr.io/cybedefend/appsec-scanners-opengrep` | Opengrep | `sast` | The 12 bundled rules of [`rules/opengrep/`](rules/opengrep/README.md); no registry rule set |
-| `gitleaks` | `ghcr.io/cybedefend/appsec-scanners-gitleaks` | Gitleaks | `secret` | Scans the files, not the git history; matches are redacted before upload |
-| `trivy-config` | `ghcr.io/cybedefend/appsec-scanners-trivy-config` | Trivy | `iac` | Terraform, Kubernetes, Dockerfile, CloudFormation, Helm; embedded checks, no download |
-| `zizmor` | `ghcr.io/cybedefend/appsec-scanners-zizmor` | zizmor | `cicd` | GitHub Actions workflows; offline unless `GH_TOKEN` is set |
-| `trivy-fs` | `ghcr.io/cybedefend/appsec-scanners-trivy-fs` | Trivy | `sca` | Downloads Trivy's vulnerability database at each run |
-| `trivy-image` | `ghcr.io/cybedefend/appsec-scanners-trivy-image` | Trivy | `container` | Downloads Trivy's vulnerability database at each run |
+| `opengrep` | `ghcr.io/cybedefend/cybedefend-scanners/opengrep` | Opengrep | `sast` | The 12 bundled rules of [`rules/opengrep/`](rules/opengrep/README.md); no registry rule set |
+| `gitleaks` | `ghcr.io/cybedefend/cybedefend-scanners/gitleaks` | Gitleaks | `secret` | Scans the files, not the git history; matches are redacted before upload |
+| `trivy-config` | `ghcr.io/cybedefend/cybedefend-scanners/trivy-config` | Trivy | `iac` | Terraform, Kubernetes, Dockerfile, CloudFormation, Helm; embedded checks, no download |
+| `zizmor` | `ghcr.io/cybedefend/cybedefend-scanners/zizmor` | zizmor | `cicd` | GitHub Actions workflows; offline unless `GH_TOKEN` is set |
+| `trivy-fs` | `ghcr.io/cybedefend/cybedefend-scanners/trivy-fs` | Trivy | `sca` | Downloads Trivy's vulnerability database at each run |
+| `trivy-image` | `ghcr.io/cybedefend/cybedefend-scanners/trivy-image` | Trivy | `container` | Downloads Trivy's vulnerability database at each run |
 
 Images are published for `linux/amd64` and `linux/arm64`, tagged with the
 release version without its leading `v` (`:1.0.0`), its major (`:1`) and
@@ -68,7 +68,7 @@ export CYBEDEFEND_BRANCH=main
 
 docker run --rm -v "$PWD:/src:ro" \
   -e CYBEDEFEND_API_URL -e CYBEDEFEND_TOKEN -e CYBEDEFEND_PROJECT_ID -e CYBEDEFEND_BRANCH \
-  ghcr.io/cybedefend/appsec-scanners-opengrep:1 --upload
+  ghcr.io/cybedefend/cybedefend-scanners/opengrep:1 --upload
 ```
 
 The image's entrypoint is `appsec-scanner run <adapter>`: flags such as
@@ -80,7 +80,7 @@ export CYBEDEFEND_IMAGE=registry.example.com/team/api:1.4.0
 docker run --rm \
   -e CYBEDEFEND_API_URL -e CYBEDEFEND_TOKEN -e CYBEDEFEND_PROJECT_ID -e CYBEDEFEND_BRANCH \
   -e CYBEDEFEND_IMAGE -e TRIVY_USERNAME -e TRIVY_PASSWORD \
-  ghcr.io/cybedefend/appsec-scanners-trivy-image:1 --upload
+  ghcr.io/cybedefend/cybedefend-scanners/trivy-image:1 --upload
 ```
 
 [`examples/local/run.sh`](examples/local/run.sh) does the same for any scanner,
@@ -117,7 +117,7 @@ workflow with every scanner is in
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/CybeDefend/cybedefend-scanners/v1.0.0/templates/gitlab/appsec-scanners.gitlab-ci.yml
+  - remote: https://raw.githubusercontent.com/CybeDefend/cybedefend-scanners/v1.0.0/templates/gitlab/cybedefend-scanners.gitlab-ci.yml
 
 sast:
   extends: .cybedefend-sast
@@ -297,7 +297,7 @@ import also takes `-F image=<reference>`. The answer is `202 { scanId }`.
 ## Opengrep rules
 
 The `opengrep` image bundles 12 rules of our own, for Python, JavaScript and
-TypeScript, Java and Go, at `/opt/appsec-scanners/rules/opengrep`. They are
+TypeScript, Java and Go, at `/opt/cybedefend-scanners/rules/opengrep`. They are
 listed, with their CWE and severity, in
 [`rules/opengrep/README.md`](rules/opengrep/README.md), and each one is
 Apache-2.0 (`metadata.license`).
@@ -307,7 +307,7 @@ directories, comma-separated):
 
 ```bash
 docker run --rm -v "$PWD:/src:ro" -v "$PWD/my-rules:/rules:ro" -e OPENGREP_CONFIG=/rules \
-  ghcr.io/cybedefend/appsec-scanners-opengrep:1
+  ghcr.io/cybedefend/cybedefend-scanners/opengrep:1
 ```
 
 Only local paths are read: a registry name (`auto`, `p/…`, `r/…`, a URL) is
