@@ -8,7 +8,10 @@
 ARG VERSION=dev
 
 # Stage 1: the static appsec-scanner binary.
-FROM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
+# Runs on the build machine; Go compiles for the target platform.
+ARG TARGETOS TARGETARCH
+ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
 ARG VERSION
 WORKDIR /build
 COPY go.mod ./

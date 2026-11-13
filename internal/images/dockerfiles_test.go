@@ -601,3 +601,68 @@ func TestGitleaksShipsItsModulesLicences(t *testing.T) {
 		t.Errorf("%s: the final stage does not COPY the modules' licences to %s/gitleaks-modules/", path, licenceDir)
 	}
 }
+
+// TestGoStagesCrossCompile: every golang stage runs on the build machine's
+// platform and has Go compile for the image's target (GOOS, GOARCH). An
+// arm64 image built on an amd64 runner then compiles natively instead of
+// under QEMU emulation, which made a release several times slower. The
+// programs are static (CGO_ENABLED=0), so cross-compiling changes nothing in
+// them.
+func TestGoStagesCrossCompile(t *testing.T) {
+	var seen int
+	for _, path := range dockerfiles(t) {
+		var inGo bool
+		var stageLine int
+		var args, env []string
+		check := func() {
+			if !inGo {
+				return
+			}
+			for _, want := range []string{"TARGETOS", "TARGETARCH"} {
+				if !contains(args, want) {
+					t.Errorf("%s:%d: the golang stage does not declare ARG %s", path, stageLine, want)
+				}
+			}
+			for _, want := range []string{"GOOS=${TARGETOS}", "GOARCH=${TARGETARCH}"} {
+				if !contains(env, want) {
+					t.Errorf("%s:%d: the golang stage does not set ENV %s", path, stageLine, want)
+				}
+			}
+		}
+		for _, in := range parse(t, path) {
+			switch in.keyword {
+			case "FROM":
+				check()
+				m := fromRe.FindStringSubmatch(in.args)
+				inGo = m != nil && strings.HasPrefix(m[1], "golang:")
+				stageLine, args, env = in.line, nil, nil
+				if inGo {
+					seen++
+					if !strings.HasPrefix(in.args, "--platform=$BUILDPLATFORM ") {
+						t.Errorf("%s:%d: FROM %s does not run on --platform=$BUILDPLATFORM", path, in.line, in.args)
+					}
+				}
+			case "ARG":
+				for _, f := range strings.Fields(in.args) {
+					name, _, _ := strings.Cut(f, "=")
+					args = append(args, name)
+				}
+			case "ENV":
+				env = append(env, strings.Fields(in.args)...)
+			}
+		}
+		check()
+	}
+	if seen == 0 {
+		t.Fatal("no golang stage found: the check finds nothing")
+	}
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}

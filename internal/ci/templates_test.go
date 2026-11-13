@@ -630,6 +630,16 @@ func TestReleaseWorkflow(t *testing.T) {
 		if strings.TrimSpace(s.With["build-args"]) != "VERSION="+version {
 			t.Errorf("step %q: build-args %q, want VERSION=%s", s.Name, s.With["build-args"], version)
 		}
+		// The GitHub Actions cache, one scope per adapter: a release reuses
+		// the layers its inputs did not change, and the push reuses those of
+		// the amd64 build the tests ran on.
+		scope := "scope=${{ matrix.adapter }}"
+		if s.With["cache-from"] != "type=gha,"+scope {
+			t.Errorf("step %q: cache-from %q, want type=gha,%s", s.Name, s.With["cache-from"], scope)
+		}
+		if s.With["cache-to"] != "type=gha,mode=max,"+scope {
+			t.Errorf("step %q: cache-to %q, want type=gha,mode=max,%s", s.Name, s.With["cache-to"], scope)
+		}
 	}
 	ps := images.Steps[pushStep]
 	if ps.With["platforms"] != "linux/amd64,linux/arm64" {

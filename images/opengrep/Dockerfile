@@ -2,7 +2,10 @@
 # Build from the repository root: docker build -f images/opengrep/Dockerfile .
 
 # golang:1.26.10-alpine (multi-arch index)
-FROM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
+# Runs on the build machine; Go compiles for the target platform.
+ARG TARGETOS TARGETARCH
+ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
 ARG VERSION=dev
 WORKDIR /build
 COPY go.mod go.sum* ./
@@ -12,8 +15,10 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 
 # The Opengrep release binary, checked against the sha256 GitHub publishes
 # for each asset of https://github.com/opengrep/opengrep/releases/tag/v1.33.1
-FROM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS opengrep
-ARG TARGETARCH
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS opengrep
+# Runs on the build machine; downloads the target platform's binary.
+ARG TARGETOS TARGETARCH
+ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
 ARG OPENGREP_VERSION=v1.33.1
 ARG OPENGREP_SHA256_AMD64=46e8133cc490f9f50518061590ce2f6be5a08afaeda034471c0ceda4b3899808
 ARG OPENGREP_SHA256_ARM64=d1433f63a90b8bc0b6ad4b498a13b372b856ce9a754a43484ba4920fe2d76dcf
