@@ -7,6 +7,11 @@ on:
 permissions:
   contents: read
 
+# A new push to the same ref cancels the runs of the previous one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -29,3 +34,18 @@ jobs:
         run: go vet ./...
       - name: go test
         run: CGO_ENABLED=0 go test -count=1 ./...
+
+  # zizmor, at the version the zizmor image ships, audits this repository's
+  # own workflows and action. A finding of medium severity or more fails.
+  workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: zizmor
+        run: |
+          set -euo pipefail
+          docker run --rm --network none -v "$PWD:/src:ro" --entrypoint zizmor \
+            ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9 \
+            --offline --min-severity medium /src/.github/workflows /src/action.yml

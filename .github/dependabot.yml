@@ -1,0 +1,22 @@
+# Update pull requests for every pin: the actions (by commit sha), the base
+# images of each Dockerfile (by digest) and the Go modules.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directories:
+      - /images/gitleaks
+      - /images/opengrep
+      - /images/trivy-config
+      - /images/trivy-fs
+      - /images/trivy-image
+      - /images/zizmor
+    schedule:
+      interval: weekly
