@@ -9,7 +9,7 @@
 #   vars.CYBEDEFEND_PROJECT_ID     the CybeDefend project
 #
 # Replace @v1 with the full commit sha of the release you use (and set the
-# version input to that release, such as 1.2.0): a tag can be moved.
+# version input to that release, such as 1.0.0): a tag can be moved.
 name: CybeDefend AppSec
 
 on:

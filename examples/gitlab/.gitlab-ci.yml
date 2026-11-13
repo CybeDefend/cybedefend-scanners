@@ -4,7 +4,7 @@
 # Set CYBEDEFEND_API_URL, CYBEDEFEND_PROJECT_ID and CYBEDEFEND_TOKEN (masked)
 # in Settings > CI/CD > Variables; never put the token in this file. Replace
 # <commit-sha> with the full commit sha of the release you use (a tag can be
-# moved), and set CYBEDEFEND_SCANNERS_VERSION to that release, such as 1.2.0.
+# moved), and set CYBEDEFEND_SCANNERS_VERSION to that release, such as 1.0.0.
 include:
   - remote: https://raw.githubusercontent.com/CybeDefend/cybedefend-scanners/<commit-sha>/templates/gitlab/appsec-scanners.gitlab-ci.yml
 
