@@ -2,7 +2,7 @@
 # Build from the repository root: docker build -f images/opengrep/Dockerfile .
 
 # golang:1.26.10-alpine (multi-arch index)
-FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.0-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS build
 # Runs on the build machine; Go compiles for the target platform.
 ARG TARGETOS TARGETARCH
 ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
@@ -15,7 +15,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 
 # The Opengrep release binary, checked against the sha256 GitHub publishes
 # for each asset of https://github.com/opengrep/opengrep/releases/tag/v1.33.1
-FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS opengrep
+FROM --platform=$BUILDPLATFORM golang:1.27.0-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS opengrep
 # Runs on the build machine; downloads the target platform's binary.
 ARG TARGETOS TARGETARCH
 ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
