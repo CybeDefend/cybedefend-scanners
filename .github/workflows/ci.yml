@@ -21,7 +21,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.10'
+          go-version: '1.26.11'
       - name: gofmt
         run: |
           out="$(gofmt -l .)"
@@ -47,5 +47,5 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --network none -v "$PWD:/src:ro" --entrypoint zizmor \
-            ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9 \
+            ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d \
             --offline --min-severity medium /src/.github/workflows /src/action.yml
