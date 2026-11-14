@@ -1,7 +1,7 @@
 # cybedefend-scanners/opengrep: Opengrep (LGPL-2.1) with CybeDefend's own rules.
 # Build from the repository root: docker build -f images/opengrep/Dockerfile .
 
-# golang:1.26.10-alpine (multi-arch index)
+# golang:1.26.11-alpine (multi-arch index)
 FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS build
 # Runs on the build machine; Go compiles for the target platform.
 ARG TARGETOS TARGETARCH

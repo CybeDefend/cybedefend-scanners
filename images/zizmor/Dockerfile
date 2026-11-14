@@ -19,7 +19,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 RUN mkdir -p /out/tmp/appsec-scanner/home /out/tmp/appsec-scanner/tmp
 
 # Stage 2: zizmor's own image (Wolfi base, /usr/bin/zizmor), multi-arch index
-# of the 1.31.1 release.
+# of the 1.32.0 release.
 FROM ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
 # What the image redistributes, each with its licence: our program, the Go

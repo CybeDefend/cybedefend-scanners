@@ -2,9 +2,9 @@
 # Build from the repository root:
 #   docker build -f images/gitleaks/Dockerfile -t cybedefend-scanners/gitleaks:dev .
 #
-# Pins, resolved from the registries on 2026-11-03 (multi-arch index digests):
-#   golang:1.26.10-alpine      sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308
-#   alpine:3.22.7              sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
+# Pins, resolved from the registries on 2026-11-14 (multi-arch index digests):
+#   golang:1.26.11-alpine      sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb
+#   alpine:3.24.4              sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 # Gitleaks is built from source: the module github.com/zricethezav/gitleaks/v8
 # v8.30.1 (tag commit 83d9cd684c87d95d656c1458ef04895a7f1cbd8e), fetched from
 # the Go module proxy, checked by sum.golang.org and against its go.sum hash.

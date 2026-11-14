@@ -19,7 +19,7 @@ COPY cmd ./cmd
 COPY internal ./internal
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/appsec-scanner ./cmd/appsec-scanner
 
-# Stage 2: the tool. Trivy v0.76.1, Apache-2.0 (multi-arch index digest).
+# Stage 2: the tool. Trivy v0.76.2, Apache-2.0 (multi-arch index digest).
 FROM aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb AS tool
 
 # Final stage.
