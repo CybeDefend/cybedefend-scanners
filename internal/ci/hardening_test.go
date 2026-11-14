@@ -1,6 +1,7 @@
 package ci
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -86,6 +87,13 @@ func TestDependabotWatchesEveryEcosystem(t *testing.T) {
 			Ecosystem   string   `yaml:"package-ecosystem"`
 			Directory   string   `yaml:"directory"`
 			Directories []string `yaml:"directories"`
+			Groups      map[string]struct {
+				Patterns []string `yaml:"patterns"`
+			} `yaml:"groups"`
+			Ignore []struct {
+				Name        string   `yaml:"dependency-name"`
+				UpdateTypes []string `yaml:"update-types"`
+			} `yaml:"ignore"`
 		} `yaml:"updates"`
 	}
 	if err := yaml.Unmarshal(read(t, ".github/dependabot.yml"), &cfg); err != nil {
@@ -96,6 +104,30 @@ func TestDependabotWatchesEveryEcosystem(t *testing.T) {
 	}
 	watched := map[string]bool{}
 	for _, u := range cfg.Updates {
+		// One pull request per ecosystem: a pin shared by several images (Go,
+		// Trivy, Alpine) moves in all of them at once.
+		var all bool
+		for _, g := range u.Groups {
+			all = all || contains(g.Patterns, "*")
+		}
+		if !all {
+			t.Errorf("dependabot.yml: the %s updates are not grouped (a group with pattern \"*\")", u.Ecosystem)
+		}
+		// A new Go minor or major moves go.mod, every setup-go and every
+		// Dockerfile together: it is done by hand, not by Dependabot.
+		if u.Ecosystem == "docker" {
+			var ignored []string
+			for _, i := range u.Ignore {
+				if i.Name == "golang" {
+					ignored = i.UpdateTypes
+				}
+			}
+			for _, want := range []string{"version-update:semver-major", "version-update:semver-minor"} {
+				if !contains(ignored, want) {
+					t.Errorf("dependabot.yml: the docker updates do not ignore golang %s", want)
+				}
+			}
+		}
 		dirs := append([]string{u.Directory}, u.Directories...)
 		for _, d := range dirs {
 			if d != "" {
@@ -116,6 +148,60 @@ func TestDependabotWatchesEveryEcosystem(t *testing.T) {
 	for _, w := range want {
 		if !watched[w] && !watched[strings.TrimSpace(w)+" "] {
 			t.Errorf("dependabot.yml does not watch %q", w)
+		}
+	}
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// TestThirdPartyNoticesNameTheShippedPins: THIRD_PARTY_NOTICES.md names the
+// exact tool each image ships. An update of a pin (by Dependabot or by hand)
+// fails until the notices follow it, and Trivy is the same in its three
+// images.
+func TestThirdPartyNoticesNameTheShippedPins(t *testing.T) {
+	notices := string(read(t, "THIRD_PARTY_NOTICES.md"))
+	from := regexp.MustCompile(`(?m)^FROM (\S+:(\S+?)@sha256:[0-9a-f]{64})`)
+	arg := func(file, name string) string {
+		m := regexp.MustCompile(`(?m)^ARG ` + name + `=(\S+)$`).FindStringSubmatch(string(read(t, file)))
+		if m == nil {
+			t.Fatalf("%s has no ARG %s", file, name)
+		}
+		return m[1]
+	}
+	trivy := map[string]bool{}
+	for _, a := range []string{"trivy-config", "trivy-fs", "trivy-image"} {
+		for _, m := range from.FindAllStringSubmatch(string(read(t, "images/"+a+"/Dockerfile")), -1) {
+			if strings.HasPrefix(m[1], "aquasec/trivy:") {
+				trivy[m[1]] = true
+				if !strings.Contains(notices, "`"+m[1]+"`") || !strings.Contains(notices, "v"+m[2]) {
+					t.Errorf("THIRD_PARTY_NOTICES.md does not name %s (v%s) that images/%s ships", m[1], m[2], a)
+				}
+			}
+		}
+	}
+	if len(trivy) != 1 {
+		t.Errorf("the three Trivy images ship %d different Trivy pins, want one: %v", len(trivy), trivy)
+	}
+	for _, m := range from.FindAllStringSubmatch(string(read(t, "images/zizmor/Dockerfile")), -1) {
+		if strings.HasPrefix(m[1], "ghcr.io/zizmorcore/zizmor:") && !strings.Contains(notices, "`"+m[1]+"`") {
+			t.Errorf("THIRD_PARTY_NOTICES.md does not name %s", m[1])
+		}
+	}
+	for _, c := range []struct{ file, arg, tool string }{
+		{"images/opengrep/Dockerfile", "OPENGREP_VERSION", "Opengrep"},
+		{"images/gitleaks/Dockerfile", "GITLEAKS_VERSION", "Gitleaks"},
+	} {
+		v := arg(c.file, c.arg)
+		row := fmt.Sprintf("| %s | %s |", c.tool, strings.TrimPrefix(v, "v"))
+		if !strings.Contains(notices, v) && !strings.Contains(notices, row) {
+			t.Errorf("THIRD_PARTY_NOTICES.md does not name %s %s", c.tool, v)
 		}
 	}
 }

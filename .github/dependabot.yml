@@ -1,15 +1,22 @@
 # Update pull requests for every pin: the actions (by commit sha), the base
-# images of each Dockerfile (by digest) and the Go modules.
+# images of each Dockerfile (by digest) and the Go modules. One pull request
+# per ecosystem, so a pin shared by several images moves in all of them.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
+    groups:
+      go-modules:
+        patterns: ['*']
   - package-ecosystem: docker
     directories:
       - /images/gitleaks
@@ -20,3 +27,11 @@ updates:
       - /images/zizmor
     schedule:
       interval: weekly
+    groups:
+      images:
+        patterns: ['*']
+    ignore:
+      # A new Go minor or major moves go.mod, every setup-go and every
+      # Dockerfile together, by hand. Go patch releases still come.
+      - dependency-name: golang
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
