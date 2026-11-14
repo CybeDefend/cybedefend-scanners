@@ -303,7 +303,7 @@ func TestGitLabTemplateJobs(t *testing.T) {
 			t.Errorf("%s: entrypoint %v, want [\"\"]", job, j.Image.Entrypoint)
 		}
 		script := strings.Join(j.Script, "\n")
-		if !strings.Contains(script, "appsec-scanner run "+adapter+" ") || !strings.Contains(script, `--source "$CI_PROJECT_DIR"`) ||
+		if !strings.Contains(script, "cybedefend-scanner run "+adapter+" ") || !strings.Contains(script, `--source "$CI_PROJECT_DIR"`) ||
 			!strings.Contains(script, "--upload") {
 			t.Errorf("%s: script %q does not run %s on $CI_PROJECT_DIR with --upload", job, script, adapter)
 		}

@@ -84,7 +84,7 @@ func fakeServer(t *testing.T) (*httptest.Server, *received, *atomic.Int32) {
 }
 
 func newClient(baseURL string) *Client {
-	return &Client{BaseURL: baseURL, Token: "cdp_x", UserAgent: "appsec-scanner/test"}
+	return &Client{BaseURL: baseURL, Token: "cdp_x", UserAgent: "cybedefend-scanner/test"}
 }
 
 func keys(m map[string]string) []string {
@@ -113,7 +113,7 @@ func TestImportSendsTheMultipartContract(t *testing.T) {
 	if got.auth != "Bearer cdp_x" {
 		t.Fatalf("Authorization header not as expected")
 	}
-	if got.userAgent != "appsec-scanner/test" {
+	if got.userAgent != "cybedefend-scanner/test" {
 		t.Fatalf("User-Agent = %q", got.userAgent)
 	}
 	wantValues := map[string]string{"type": "sast", "branch": "main", "format": "sarif"}

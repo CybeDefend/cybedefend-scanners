@@ -57,7 +57,7 @@ type Response struct {
 	ScanID string `json:"scanId"`
 }
 
-// Client uploads imports. UserAgent is « appsec-scanner/<version> », set by the command.
+// Client uploads imports. UserAgent is « cybedefend-scanner/<version> », set by the command.
 type Client struct {
 	BaseURL, Token string
 	HTTP           *http.Client

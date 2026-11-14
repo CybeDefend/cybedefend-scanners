@@ -107,7 +107,7 @@ func TestScanRunSubmitsTheNormalisedSARIF(t *testing.T) {
 	if len(ups) != 1 || ups[0].ScanID != scanRunID || ups[0].Protocol != "1" || ups[0].Authorization != "Bearer "+scanRunToken {
 		t.Fatalf("uploads = %+v", ups)
 	}
-	if ups[0].UserAgent != "appsec-scanner/"+version {
+	if ups[0].UserAgent != "cybedefend-scanner/"+version {
 		t.Errorf("User-Agent = %q", ups[0].UserAgent)
 	}
 	if _, err := os.Stat(filepath.Join(src, "app", "main.py")); err != nil {

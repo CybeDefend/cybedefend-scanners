@@ -133,7 +133,7 @@ func TestZizmorImageOnWorkflowSample(t *testing.T) {
 	if _, ok := up.Fields["image"]; ok {
 		t.Error("a cicd upload carries an image part")
 	}
-	if !strings.HasPrefix(up.UserAgent, "appsec-scanner/") {
+	if !strings.HasPrefix(up.UserAgent, "cybedefend-scanner/") {
 		t.Errorf("User-Agent = %q", up.UserAgent)
 	}
 

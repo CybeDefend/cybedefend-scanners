@@ -1,4 +1,4 @@
-# cybedefend-scanners/gitleaks: Gitleaks v8 (MIT) and appsec-scanner.
+# cybedefend-scanners/gitleaks: Gitleaks v8 (MIT) and cybedefend-scanner.
 # Build from the repository root:
 #   docker build -f images/gitleaks/Dockerfile -t cybedefend-scanners/gitleaks:dev .
 #
@@ -18,7 +18,7 @@ COPY go.mod go.sum* ./
 COPY cmd ./cmd
 COPY internal ./internal
 ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/appsec-scanner ./cmd/appsec-scanner
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/cybedefend-scanner ./cmd/cybedefend-scanner
 
 # Gitleaks, built from its v8.30.1 source as upstream's own Dockerfile builds
 # it (CGO_ENABLED=0, no build tags, version.Version set to the tag), with the
@@ -29,7 +29,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 # nwaples/rardecode/v2 stays v2.1.0 (CVE-2025-11579): v2.2.0 changed the API
 # mholt/archives v0.1.2 builds on, and only archive traversal decodes RAR,
 # which gitleaks does not do unless --max-archive-depth is set (never by
-# appsec-scanner).
+# cybedefend-scanner).
 FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS gitleaks
 # Runs on the build machine; Go compiles for the target platform.
 ARG TARGETOS TARGETARCH
@@ -72,7 +72,7 @@ FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0
 LABEL org.opencontainers.image.title="cybedefend-scanners/gitleaks" \
       org.opencontainers.image.description="Gitleaks secret scan, redacted SARIF, upload to a CybeDefend Community Edition import API"
 COPY --from=gitleaks /out/gitleaks /usr/bin/gitleaks
-COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
+COPY --from=build /out/cybedefend-scanner /usr/local/bin/cybedefend-scanner
 # What the image redistributes, each with its licence: our program, the Go
 # runtime compiled into it, gitleaks and the modules compiled into it
 # (THIRD_PARTY_NOTICES.md).
@@ -81,15 +81,15 @@ COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md /usr/share/licenses/cybedefend-scanne
 COPY licenses/go /usr/share/licenses/cybedefend-scanners/go/
 COPY licenses/gitleaks /usr/share/licenses/cybedefend-scanners/gitleaks/
 COPY --from=gitleaks /out/licenses /usr/share/licenses/cybedefend-scanners/gitleaks-modules/
-# The default --out (/tmp/appsec-scanner/results.sarif) is written by uid
+# The default --out (/tmp/cybedefend-scanner/results.sarif) is written by uid
 # 65532, with the tools' HOME and TMPDIR under it: those three empty
 # directories only are handed to it, nothing recursive.
-RUN mkdir -p /tmp/appsec-scanner/home /tmp/appsec-scanner/tmp && chown 65532:65532 /tmp/appsec-scanner /tmp/appsec-scanner/home /tmp/appsec-scanner/tmp
+RUN mkdir -p /tmp/cybedefend-scanner/home /tmp/cybedefend-scanner/tmp && chown 65532:65532 /tmp/cybedefend-scanner /tmp/cybedefend-scanner/home /tmp/cybedefend-scanner/tmp
 WORKDIR /src
 # Tools write their home and temporary files under the default --out
 # directory, the only place a hardened run (--read-only --tmpfs
-# /tmp/appsec-scanner) leaves writable. The image ships both; appsec-scanner
+# /tmp/cybedefend-scanner) leaves writable. The image ships both; cybedefend-scanner
 # creates them again when an empty tmpfs or emptyDir is mounted there.
-ENV HOME=/tmp/appsec-scanner/home TMPDIR=/tmp/appsec-scanner/tmp
+ENV HOME=/tmp/cybedefend-scanner/home TMPDIR=/tmp/cybedefend-scanner/tmp
 USER 65532:65532
-ENTRYPOINT ["/usr/local/bin/appsec-scanner","run","gitleaks"]
+ENTRYPOINT ["/usr/local/bin/cybedefend-scanner","run","gitleaks"]

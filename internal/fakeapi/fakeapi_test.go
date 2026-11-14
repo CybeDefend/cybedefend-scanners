@@ -50,7 +50,7 @@ func post(t *testing.T, url, auth string, parts []part) *http.Response {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	req.Header.Set("User-Agent", "appsec-scanner/test")
+	req.Header.Set("User-Agent", "cybedefend-scanner/test")
 	if auth != "" {
 		req.Header.Set("Authorization", auth)
 	}
@@ -130,7 +130,7 @@ func TestFakeAPIRecordsAnUpload(t *testing.T) {
 	if !reflect.DeepEqual(sast.Fields, []string{"format", "branch", "type"}) {
 		t.Errorf("first upload: Fields = %v, want [format branch type]", sast.Fields)
 	}
-	if sast.Authorization != "Bearer "+testToken || sast.UserAgent != "appsec-scanner/test" {
+	if sast.Authorization != "Bearer "+testToken || sast.UserAgent != "cybedefend-scanner/test" {
 		t.Errorf("first upload: Authorization %q, User-Agent %q", sast.Authorization, sast.UserAgent)
 	}
 

@@ -341,16 +341,23 @@ func TestExamplesNameAReleasedVersion(t *testing.T) {
 // formerName is built so that this file does not hold it.
 const formerName = "appsec" + "-scanners"
 
-func TestImagesAreNamedAfterTheRepository(t *testing.T) {
-	old := regexp.MustCompile(formerName + `\b`)
+// TestNothingKeepsTheFormerNames: the images, the program they run
+// (cybedefend-scanner), its working directory (/tmp/cybedefend-scanner) and
+// the test switches are named after the repository. No file or path keeps
+// the former names, which no release publishes.
+func TestNothingKeepsTheFormerNames(t *testing.T) {
+	old := regexp.MustCompile(`(?i)appsec[-_]scanners?\b`)
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+		if d.IsDir() && d.Name() == ".git" {
+			return filepath.SkipDir
+		}
+		if rel, _ := filepath.Rel(root, path); old.MatchString(rel) {
+			t.Errorf("%s is named after a former name", rel)
+		}
 		if d.IsDir() {
-			if d.Name() == ".git" {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 		data, err := os.ReadFile(path)
@@ -359,7 +366,7 @@ func TestImagesAreNamedAfterTheRepository(t *testing.T) {
 		}
 		for _, line := range strings.Split(string(data), "\n") {
 			if old.MatchString(line) {
-				t.Errorf("%s names the former images: %s", path, strings.TrimSpace(line))
+				t.Errorf("%s keeps a former name: %s", path, strings.TrimSpace(line))
 				break
 			}
 		}
@@ -367,5 +374,26 @@ func TestImagesAreNamedAfterTheRepository(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestEveryImageRunsCybedefendScanner: each image's entrypoint is the
+// program the Community Edition's scan pods call by its path.
+func TestEveryImageRunsCybedefendScanner(t *testing.T) {
+	entries, err := os.ReadDir(filepath.Join(root, "images"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		want := regexp.MustCompile(`(?m)^ENTRYPOINT \["/usr/local/bin/cybedefend-scanner",\s*"run",\s*"` + regexp.QuoteMeta(e.Name()) + `"\]$`)
+		if !want.Match(read(t, "images/"+e.Name()+"/Dockerfile")) {
+			t.Errorf("images/%s/Dockerfile: the entrypoint is not /usr/local/bin/cybedefend-scanner run %s", e.Name(), e.Name())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "cmd", "cybedefend-scanner", "main.go")); err != nil {
+		t.Errorf("cmd/cybedefend-scanner/main.go: %v", err)
 	}
 }

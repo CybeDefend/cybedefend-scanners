@@ -16,7 +16,7 @@ func TestDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.Adapter != "opengrep" || c.Source != "/src" || c.Out != "/tmp/appsec-scanner/results.sarif" || c.Upload || c.Timeout != 30*time.Minute {
+	if c.Adapter != "opengrep" || c.Source != "/src" || c.Out != "/tmp/cybedefend-scanner/results.sarif" || c.Upload || c.Timeout != 30*time.Minute {
 		t.Fatalf("unexpected defaults: %+v", c)
 	}
 }
@@ -366,7 +366,7 @@ func TestSBOMOutIsOptional(t *testing.T) {
 	if err != nil || c.SBOMOut != "/out/results.cdx.json" {
 		t.Fatalf("SBOMOut = %q, err %v", c.SBOMOut, err)
 	}
-	if _, err := Load([]string{"trivy-fs", "--sbom-out", "/tmp/appsec-scanner/results.sarif"}, envOf(nil)); err == nil {
+	if _, err := Load([]string{"trivy-fs", "--sbom-out", "/tmp/cybedefend-scanner/results.sarif"}, envOf(nil)); err == nil {
 		t.Fatal("--sbom-out equal to --out was accepted")
 	}
 }

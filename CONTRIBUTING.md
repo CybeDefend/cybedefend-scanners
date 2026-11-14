@@ -1,6 +1,6 @@
 # Contributing to CybeDefend AppSec Scanners
 
-Thank you for helping. This repository holds `appsec-scanner`, a Go program that runs an open-source security tool, normalises the SARIF it writes and uploads it to a CybeDefend AppSec Community Edition instance (CybeDefend Cloud does not take imports), plus one container image per tool, a GitHub Action and a GitLab CI template.
+Thank you for helping. This repository holds `cybedefend-scanner`, a Go program that runs an open-source security tool, normalises the SARIF it writes and uploads it to a CybeDefend AppSec Community Edition instance (CybeDefend Cloud does not take imports), plus one container image per tool, a GitHub Action and a GitLab CI template.
 
 ## Set-up
 
@@ -70,7 +70,7 @@ By making a contribution to this project, I certify that:
 An adapter runs one tool for one import type (`sast`, `iac`, `secret`, `cicd`, `sca` or `container`).
 
 1. **Interface.** Implement the adapter interface in `internal/adapter/<name>.go` and register it. It builds the tool's command line (SARIF output, no network unless the tool needs its database, findings never turned into a failing exit code) and names the exit codes that mean « findings were reported ». Test the arguments first.
-2. **Dockerfile.** Add `images/<name>/Dockerfile`. Every `FROM` is pinned by digest (`@sha256:`), every downloaded file is checked against a `sha256` written in the Dockerfile, the image runs as uid 65532, and its entrypoint is the static `appsec-scanner` binary.
+2. **Dockerfile.** Add `images/<name>/Dockerfile`. Every `FROM` is pinned by digest (`@sha256:`), every downloaded file is checked against a `sha256` written in the Dockerfile, the image runs as uid 65532, and its entrypoint is the static `cybedefend-scanner` binary.
 3. **Sample.** Add a small vulnerable sample under `testdata/samples/<name>/`. Never commit a real or realistic secret: secret fixtures are generated at test time.
 4. **Integration test.** Add a test under `test/integration/` (build tag `integration`) that runs the built image on the sample against the fake import API and checks what was uploaded.
 5. **Notices.** Record the tool, its pinned version and its licence in `THIRD_PARTY_NOTICES.md`.

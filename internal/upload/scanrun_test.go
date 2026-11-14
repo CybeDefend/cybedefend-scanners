@@ -30,7 +30,7 @@ func fastRetries(t *testing.T) {
 
 // scanRunClient returns a client for srv carrying the scan token.
 func scanRunClient(srv *httptest.Server) *Client {
-	return &Client{BaseURL: srv.URL + "/api/", Token: scanToken, HTTP: srv.Client(), UserAgent: "appsec-scanner/test"}
+	return &Client{BaseURL: srv.URL + "/api/", Token: scanToken, HTTP: srv.Client(), UserAgent: "cybedefend-scanner/test"}
 }
 
 // answer writes a JSON refusal with the given code.
@@ -93,7 +93,7 @@ func TestScanRunSendsHeadersAndFile(t *testing.T) {
 	if accept != "application/json" {
 		t.Errorf("Accept = %q", accept)
 	}
-	if got.userAgent != "appsec-scanner/test" {
+	if got.userAgent != "cybedefend-scanner/test" {
 		t.Errorf("User-Agent = %q", got.userAgent)
 	}
 	if len(got.values) != 0 {

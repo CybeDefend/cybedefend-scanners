@@ -37,7 +37,7 @@ variables:
   variables:
     CYBEDEFEND_IMAGE: ""
   script:
-    - appsec-scanner run opengrep --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-opengrep.sarif" --upload
+    - cybedefend-scanner run opengrep --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-opengrep.sarif" --upload
   artifacts:
     when: always
     paths: [cybedefend-opengrep.sarif]
@@ -49,7 +49,7 @@ variables:
   variables:
     CYBEDEFEND_IMAGE: ""
   script:
-    - appsec-scanner run gitleaks --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-gitleaks.sarif" --upload
+    - cybedefend-scanner run gitleaks --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-gitleaks.sarif" --upload
   artifacts:
     when: always
     paths: [cybedefend-gitleaks.sarif]
@@ -61,7 +61,7 @@ variables:
   variables:
     CYBEDEFEND_IMAGE: ""
   script:
-    - appsec-scanner run trivy-config --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-trivy-config.sarif" --upload
+    - cybedefend-scanner run trivy-config --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-trivy-config.sarif" --upload
   artifacts:
     when: always
     paths: [cybedefend-trivy-config.sarif]
@@ -73,7 +73,7 @@ variables:
   variables:
     CYBEDEFEND_IMAGE: ""
   script:
-    - appsec-scanner run zizmor --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-zizmor.sarif" --upload
+    - cybedefend-scanner run zizmor --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-zizmor.sarif" --upload
   artifacts:
     when: always
     paths: [cybedefend-zizmor.sarif]
@@ -85,7 +85,7 @@ variables:
   variables:
     CYBEDEFEND_IMAGE: ""
   script:
-    - appsec-scanner run trivy-fs --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-trivy-fs.sarif" --upload
+    - cybedefend-scanner run trivy-fs --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-trivy-fs.sarif" --upload
   artifacts:
     when: always
     paths: [cybedefend-trivy-fs.sarif]
@@ -98,7 +98,7 @@ variables:
     TRIVY_USERNAME: $CI_REGISTRY_USER
     TRIVY_PASSWORD: $CI_REGISTRY_PASSWORD
   script:
-    - appsec-scanner run trivy-image --image "$CYBEDEFEND_IMAGE" --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-trivy-image.sarif" --upload
+    - cybedefend-scanner run trivy-image --image "$CYBEDEFEND_IMAGE" --source "$CI_PROJECT_DIR" --out "$CI_PROJECT_DIR/cybedefend-trivy-image.sarif" --upload
   artifacts:
     when: always
     paths: [cybedefend-trivy-image.sarif]

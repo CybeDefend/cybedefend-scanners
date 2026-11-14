@@ -3,7 +3,7 @@
 The images of this repository bundle the open-source tools below, each under
 its own licence. Opengrep, Trivy and zizmor are the upstream release binaries,
 unchanged; gitleaks is built from its released source with some dependencies
-raised to fixed versions (below). The `appsec-scanner` program around them is
+raised to fixed versions (below). The `cybedefend-scanner` program around them is
 Apache-2.0, and the Go runtime compiled into it is BSD-3-Clause.
 
 ## Licences in the images
@@ -11,9 +11,9 @@ Apache-2.0, and the Go runtime compiled into it is BSD-3-Clause.
 Every image keeps the licence texts of what it redistributes under
 `/usr/share/licenses/cybedefend-scanners/`:
 
-- `LICENSE`, `NOTICE` and this file, for `appsec-scanner`;
+- `LICENSE`, `NOTICE` and this file, for `cybedefend-scanner`;
 - `go/` (`LICENSE`, `PATENTS`), for the Go runtime compiled into
-  `appsec-scanner`;
+  `cybedefend-scanner`;
 - the tool's directory: `opengrep/`, `gitleaks/`, `trivy/` (`LICENSE`,
   `NOTICE`) or `zizmor/`, copied from [`licenses/`](licenses/), each taken from
   the project at the version the image ships;
@@ -37,7 +37,7 @@ distributions' own licence files and source.
 
 Opengrep is licensed under the GNU Lesser General Public License v2.1, whose
 text the image ships (`/usr/share/licenses/cybedefend-scanners/opengrep/LICENSE`).
-It runs as a separate program: `appsec-scanner` starts it and reads its SARIF
+It runs as a separate program: `cybedefend-scanner` starts it and reads its SARIF
 output, and links none of its code. Its source code is at
 https://github.com/opengrep/opengrep (tag `v1.33.1`).
 
@@ -78,7 +78,7 @@ no registry rule set is bundled or fetched.
   Kept: `github.com/nwaples/rardecode/v2` v2.1.0 (CVE-2025-11579, fixed in
   v2.2.0, whose API `github.com/mholt/archives` v0.1.2 no longer builds
   against). Only archive traversal decodes RAR, and gitleaks does none unless
-  `--max-archive-depth` is set, which appsec-scanner never does
+  `--max-archive-depth` is set, which cybedefend-scanner never does
   (`sources/file.go` returns before extraction at depth 0; `Rar.Match` only
   compares header bytes). Also reported, not fixable by a release:
   GO-2026-5932, « x/crypto/openpgp is unmaintained », whose only fix is an
@@ -107,9 +107,9 @@ no registry rule set is bundled or fetched.
   newer version nor sends usage data to Aqua (`--skip-version-check`, `--disable-telemetry`).
   Trivy exits 0 whatever it finds (`--exit-code 0`) and writes `security-severity` on its rules.
 - **Invocation (`trivy-fs`, import type `sca`):**
-  `trivy fs --scanners vuln --format sarif --output <file> --exit-code 0 --cache-dir /tmp/appsec-scanner/trivy-cache --skip-version-check --disable-telemetry --quiet <src>`.
+  `trivy fs --scanners vuln --format sarif --output <file> --exit-code 0 --cache-dir /tmp/cybedefend-scanner/trivy-cache --skip-version-check --disable-telemetry --quiet <src>`.
 - **Invocation (`trivy-image`, import type `container`):**
-  `trivy image --scanners vuln --format sarif --output <file> --exit-code 0 --cache-dir /tmp/appsec-scanner/trivy-cache --skip-version-check --disable-telemetry --quiet <image>`,
+  `trivy image --scanners vuln --format sarif --output <file> --exit-code 0 --cache-dir /tmp/cybedefend-scanner/trivy-cache --skip-version-check --disable-telemetry --quiet <image>`,
   or `… --quiet --input <archive>` for a `docker save` archive. Trivy pulls the scanned
   image itself from its registry (`TRIVY_USERNAME`, `TRIVY_PASSWORD` or
   `TRIVY_REGISTRY_TOKEN` for a private one), or reads the archive; no Docker socket is used.
@@ -123,7 +123,7 @@ no registry rule set is bundled or fetched.
   vulnerability database from `mirror.gcr.io/aquasec/trivy-db`, then
   `ghcr.io/aquasecurity/trivy-db` (and, for Java projects, the Java index from
   `mirror.gcr.io/aquasec/trivy-java-db`, then `ghcr.io/aquasecurity/trivy-java-db`)
-  into `/tmp/appsec-scanner/trivy-cache`. `TRIVY_DB_REPOSITORY` and
+  into `/tmp/cybedefend-scanner/trivy-cache`. `TRIVY_DB_REPOSITORY` and
   `TRIVY_JAVA_DB_REPOSITORY` name a mirror instead.
 - Source: <https://github.com/aquasecurity/trivy-db> (and
   <https://github.com/aquasecurity/trivy-java-db>), published by Aqua Security.

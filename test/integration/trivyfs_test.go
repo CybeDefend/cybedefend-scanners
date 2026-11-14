@@ -25,8 +25,8 @@ const trivyFsImage = "cybedefend-scanners/trivy-fs:dev"
 // trivyFsSkip skips when the test cannot download Trivy's database or run docker.
 func trivyFsSkip(t *testing.T) {
 	t.Helper()
-	if os.Getenv("APPSEC_SCANNERS_NO_NETWORK") == "1" {
-		t.Skip("APPSEC_SCANNERS_NO_NETWORK=1: trivy-fs downloads its vulnerability database")
+	if os.Getenv("CYBEDEFEND_SCANNERS_NO_NETWORK") == "1" {
+		t.Skip("CYBEDEFEND_SCANNERS_NO_NETWORK=1: trivy-fs downloads its vulnerability database")
 	}
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("docker is not on PATH")

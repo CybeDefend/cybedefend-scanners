@@ -28,7 +28,7 @@ Open-source security scanners, packaged as container images, that send their res
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/how-it-works-dark.png">
-    <img src=".github/assets/how-it-works-light.png" alt="Your code, or an image reference, goes into one scanner image. The image runs appsec-scanner run with an adapter: it runs the open-source tool, normalises its SARIF and checks the server's limits. With --upload, the SARIF goes to the import route of your Community Edition instance. An image runs with docker run, the GitHub Action, the GitLab CI template or as a scan pod of the instance. Any other SARIF 2.1.0 file can be sent to the same import route with curl." width="100%">
+    <img src=".github/assets/how-it-works-light.png" alt="Your code, or an image reference, goes into one scanner image. The image runs cybedefend-scanner run with an adapter: it runs the open-source tool, normalises its SARIF and checks the server's limits. With --upload, the SARIF goes to the import route of your Community Edition instance. An image runs with docker run, the GitHub Action, the GitLab CI template or as a scan pod of the instance. Any other SARIF 2.1.0 file can be sent to the same import route with curl." width="100%">
   </picture>
 </p>
 
@@ -50,7 +50,7 @@ What every image has in common:
 - **Platforms.** `linux/amd64` and `linux/arm64`.
 - **Tags.** The release version without its leading `v` (`:1.0.0`), its major (`:1`) and `:latest`.
 - **User.** They run as uid 65532.
-- **Read-only root filesystem.** Supported when `/tmp/appsec-scanner` is writable (an `emptyDir`, or `--read-only --tmpfs /tmp/appsec-scanner:uid=65532,gid=65532`): the tools' `HOME` and `TMPDIR` live there.
+- **Read-only root filesystem.** Supported when `/tmp/cybedefend-scanner` is writable (an `emptyDir`, or `--read-only --tmpfs /tmp/cybedefend-scanner:uid=65532,gid=65532`): the tools' `HOME` and `TMPDIR` live there.
 - **Tools and licences.** The versions of the tools and their licences are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Quick start
@@ -70,7 +70,7 @@ docker run --rm -v "$PWD:/src:ro" \
   ghcr.io/cybedefend/cybedefend-scanners/opengrep:1 --upload
 ```
 
-The image's entrypoint is `appsec-scanner run <adapter>`: flags such as `--upload` follow the image name. Variables are passed by name (`-e NAME`), so the token never appears on a command line.
+The image's entrypoint is `cybedefend-scanner run <adapter>`: flags such as `--upload` follow the image name. Variables are passed by name (`-e NAME`), so the token never appears on a command line.
 
 A container scan:
 
@@ -177,7 +177,7 @@ A scanner is one adapter and its image. An adapter runs one tool for one import 
 | | Where | What |
 |---|---|---|
 | 1 | `internal/adapter/<name>.go` | **Adapter.** Implement the adapter interface and register it. It builds the tool's command line: SARIF output, no network unless the tool needs its database, findings never turned into a failing exit code. Test the arguments first. |
-| 2 | `images/<name>/Dockerfile` | **Dockerfile.** Every `FROM` pinned by digest, every download checked against a `sha256`, uid 65532, the static `appsec-scanner` binary as entrypoint. |
+| 2 | `images/<name>/Dockerfile` | **Dockerfile.** Every `FROM` pinned by digest, every download checked against a `sha256`, uid 65532, the static `cybedefend-scanner` binary as entrypoint. |
 | 3 | `testdata/samples/<name>/` | **Sample.** A small vulnerable sample. Never a real or realistic secret: secret fixtures are generated at test time. |
 | 4 | `test/integration/` | **Integration test.** Build tag `integration`: run the built image on the sample against the fake import API and check what was uploaded. |
 | 5 | `THIRD_PARTY_NOTICES.md` | **Notices.** The tool, its pinned version and its licence. |
@@ -212,7 +212,7 @@ Go 1.26, standard library only (plus `gopkg.in/yaml.v3` in tests). Committed sam
 
 | Path | What is in it |
 |---|---|
-| `cmd/appsec-scanner/` | The program every image runs |
+| `cmd/cybedefend-scanner/` | The program every image runs |
 | `internal/adapter/` | One adapter per tool, and their registry |
 | `internal/runner/`, `internal/sarif/`, `internal/upload/` | Running the tool, reading and normalising its SARIF, sending it |
 | `images/<adapter>/Dockerfile` | One image per adapter |
@@ -238,12 +238,12 @@ Go 1.26, standard library only (plus `gopkg.in/yaml.v3` in tests). Committed sam
 | `TRIVY_DB_REPOSITORY`, `TRIVY_JAVA_DB_REPOSITORY` | Mirrors of Trivy's databases (`trivy-fs`, `trivy-image`). |
 | `TRIVY_INSECURE` | Lets `trivy-fs` and `trivy-image` reach a registry or mirror without TLS verification. |
 
-Flags of `appsec-scanner run <adapter>`:
+Flags of `cybedefend-scanner run <adapter>`:
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--source` | `/src` | The directory the tool scans. |
-| `--out` | `/tmp/appsec-scanner/results.sarif` | Where the normalised SARIF is written. |
+| `--out` | `/tmp/cybedefend-scanner/results.sarif` | Where the normalised SARIF is written. |
 | `--upload` | | Uploads the SARIF to the import route. |
 | `--scan-run` | | The mode of a scan pod, [below](#scan-runs-cybedefend-community-cluster). |
 | `--timeout` | `30m` | How long the tool may run. |
@@ -297,11 +297,11 @@ A refusal is read from the response body's `code`, never from its `message`, whi
 
 ## Community Edition only
 
-`appsec-scanner --upload` sends the instance's `cdp_…` personal access token as a bearer, as it is. CybeDefend Cloud does not take imports, of any type: it answers `IMPORT_TYPE_NOT_AVAILABLE`. The images, the action and the GitLab template upload to a Community Edition instance only.
+`cybedefend-scanner --upload` sends the instance's `cdp_…` personal access token as a bearer, as it is. CybeDefend Cloud does not take imports, of any type: it answers `IMPORT_TYPE_NOT_AVAILABLE`. The images, the action and the GitLab template upload to a Community Edition instance only.
 
 ## Scan runs (CybeDefend Community cluster)
 
-A CybeDefend Community Edition instance connected to a Kubernetes cluster starts one pod per scanner and scan, running `appsec-scanner run <adapter> --scan-run`.
+A CybeDefend Community Edition instance connected to a Kubernetes cluster starts one pod per scanner and scan, running `cybedefend-scanner run <adapter> --scan-run`.
 
 ```mermaid
 sequenceDiagram
@@ -315,7 +315,7 @@ sequenceDiagram
     I-->>P: 202
 ```
 
-In that mode, `appsec-scanner`:
+In that mode, `cybedefend-scanner`:
 
 1. downloads the scan's source archive from `CYBEDEFEND_ARCHIVE_URL` into `--source` (`/src`), within 2 GiB downloaded, 3 GiB unpacked and 200,000 entries; absolute paths and `..` refuse the archive, links are skipped, and the zip is deleted once unpacked. An archive whose only entry is a folder (GitHub and GitLab name it `<repo>-<sha>/`) is scanned from inside that folder, so the results' paths are relative to the repository: they do not carry that folder's name. A ZIP with several top-level entries is scanned as is;
 2. runs the tool and normalises its SARIF, as without `--scan-run`;

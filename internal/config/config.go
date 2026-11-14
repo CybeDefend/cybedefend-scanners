@@ -1,5 +1,5 @@
 // Package config reads the command line and the environment of
-// `appsec-scanner run`. The environment names are the CLI's.
+// `cybedefend-scanner run`. The environment names are the CLI's.
 package config
 
 import (
@@ -17,7 +17,7 @@ import (
 // Defaults of the flags.
 const (
 	DefaultSource  = "/src"
-	DefaultOut     = "/tmp/appsec-scanner/results.sarif"
+	DefaultOut     = "/tmp/cybedefend-scanner/results.sarif"
 	DefaultTimeout = 30 * time.Minute
 )
 
@@ -89,7 +89,7 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 	}
 	switch len(positional) {
 	case 0:
-		return Config{}, errors.New("name the adapter: appsec-scanner run <adapter> [flags]")
+		return Config{}, errors.New("name the adapter: cybedefend-scanner run <adapter> [flags]")
 	case 1:
 		c.Adapter = positional[0]
 	default:
