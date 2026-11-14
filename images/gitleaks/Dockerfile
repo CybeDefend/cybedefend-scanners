@@ -68,7 +68,7 @@ RUN set -eu; \
     done < /tmp/modules; \
     ls -R /out/licenses
 
-FROM alpine:3.22.7@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
+FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 LABEL org.opencontainers.image.title="cybedefend-scanners/gitleaks" \
       org.opencontainers.image.description="Gitleaks secret scan, redacted SARIF, upload to a CybeDefend Community Edition import API"
 COPY --from=gitleaks /out/gitleaks /usr/bin/gitleaks
