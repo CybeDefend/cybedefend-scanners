@@ -9,7 +9,7 @@
 # v8.30.1 (tag commit 83d9cd684c87d95d656c1458ef04895a7f1cbd8e), fetched from
 # the Go module proxy, checked by sum.golang.org and against its go.sum hash.
 
-FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS build
 # Runs on the build machine; Go compiles for the target platform.
 ARG TARGETOS TARGETARCH
 ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
@@ -30,7 +30,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 # mholt/archives v0.1.2 builds on, and only archive traversal decodes RAR,
 # which gitleaks does not do unless --max-archive-depth is set (never by
 # appsec-scanner).
-FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS gitleaks
+FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS gitleaks
 # Runs on the build machine; Go compiles for the target platform.
 ARG TARGETOS TARGETARCH
 ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
@@ -68,7 +68,7 @@ RUN set -eu; \
     done < /tmp/modules; \
     ls -R /out/licenses
 
-FROM alpine:3.22.7@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
+FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 LABEL org.opencontainers.image.title="cybedefend-scanners/gitleaks" \
       org.opencontainers.image.description="Gitleaks secret scan, redacted SARIF, upload to a CybeDefend Community Edition import API"
 COPY --from=gitleaks /out/gitleaks /usr/bin/gitleaks

@@ -2,7 +2,7 @@
 # Build from the repository root: docker build -f images/opengrep/Dockerfile .
 
 # golang:1.26.10-alpine (multi-arch index)
-FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS build
 # Runs on the build machine; Go compiles for the target platform.
 ARG TARGETOS TARGETARCH
 ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
@@ -15,7 +15,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 
 # The Opengrep release binary, checked against the sha256 GitHub publishes
 # for each asset of https://github.com/opengrep/opengrep/releases/tag/v1.33.1
-FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS opengrep
+FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS opengrep
 # Runs on the build machine; downloads the target platform's binary.
 ARG TARGETOS TARGETARCH
 ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
@@ -34,7 +34,7 @@ RUN set -eu; \
 
 # Opengrep's release binary is linked against glibc.
 # debian:bookworm-slim (multi-arch index)
-FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3
+FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 COPY --from=opengrep /out-opengrep /usr/local/bin/opengrep
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
 # What the image redistributes, each with its licence: our program, the Go

@@ -5,7 +5,7 @@
 #   docker build -f images/zizmor/Dockerfile -t cybedefend-scanners/zizmor:dev .
 
 # Stage 1: the static appsec-scanner binary.
-FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS build
 # Runs on the build machine; Go compiles for the target platform.
 ARG TARGETOS TARGETARCH
 ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
@@ -20,7 +20,7 @@ RUN mkdir -p /out/tmp/appsec-scanner/home /out/tmp/appsec-scanner/tmp
 
 # Stage 2: zizmor's own image (Wolfi base, /usr/bin/zizmor), multi-arch index
 # of the 1.31.1 release.
-FROM ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9
+FROM ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
 # What the image redistributes, each with its licence: our program, the Go
 # runtime compiled into it, and the tool (THIRD_PARTY_NOTICES.md).
