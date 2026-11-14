@@ -34,7 +34,7 @@ func TestOpengrepImageOnPythonSample(t *testing.T) {
 	if u.Authorization != "Bearer "+testToken {
 		t.Error("the token was not sent as the bearer")
 	}
-	if !strings.HasPrefix(u.UserAgent, "appsec-scanner/") {
+	if !strings.HasPrefix(u.UserAgent, "cybedefend-scanner/") {
 		t.Errorf("User-Agent = %q", u.UserAgent)
 	}
 	if bytes.Contains(u.SARIF, []byte(testToken)) {

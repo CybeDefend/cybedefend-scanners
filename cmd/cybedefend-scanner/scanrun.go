@@ -136,7 +136,7 @@ var errRunStopped = errors.New("the scan run was stopped")
 // results route of the scan run. An instance that does not take the SBOM gets
 // the SARIF alone (upload.SubmitScanRunWithSBOM), said in one line.
 func submitScanRun(ctx context.Context, cfg config.Config, sarif, sbom []byte, logf func(string, ...any)) int {
-	client := &upload.Client{BaseURL: cfg.APIURL, Token: cfg.ScanToken, UserAgent: "appsec-scanner/" + version}
+	client := &upload.Client{BaseURL: cfg.APIURL, Token: cfg.ScanToken, UserAgent: "cybedefend-scanner/" + version}
 	if sbom != nil {
 		logf("submitting %d bytes of results and %d bytes of SBOM to scan %s", len(sarif), len(sbom), cfg.ScanID)
 	} else {

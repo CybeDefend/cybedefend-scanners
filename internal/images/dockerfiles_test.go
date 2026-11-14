@@ -128,7 +128,7 @@ func TestDockerfilesPinEverything(t *testing.T) {
 			continue
 		}
 		final := ins[lastFrom+1:]
-		wantEntry := `["/usr/local/bin/appsec-scanner","run","` + adapter + `"]`
+		wantEntry := `["/usr/local/bin/cybedefend-scanner","run","` + adapter + `"]`
 		var user, entry string
 		for _, in := range final {
 			switch in.keyword {
@@ -213,14 +213,14 @@ func TestNoSampleWorkflowRunsInThisRepository(t *testing.T) {
 var (
 	// ownOutDirRe is a RUN that creates the default --out directory and hands
 	// that directory (not a tree) to uid 65532.
-	ownOutDirRe = regexp.MustCompile(`\bmkdir\s+-p\s+/tmp/appsec-scanner(/\S*)?(\s|$)[\s\S]*\bchown\s+65532:65532\s+(\S+\s+)*/tmp/appsec-scanner(\s|$)`)
-	// copyOutDirRe is a COPY that brings an empty appsec-scanner directory
+	ownOutDirRe = regexp.MustCompile(`\bmkdir\s+-p\s+/tmp/cybedefend-scanner(/\S*)?(\s|$)[\s\S]*\bchown\s+65532:65532\s+(\S+\s+)*/tmp/cybedefend-scanner(\s|$)`)
+	// copyOutDirRe is a COPY that brings an empty cybedefend-scanner directory
 	// under /tmp, owned by uid 65532, for a tool image built without a RUN.
 	copyOutDirRe = regexp.MustCompile(`^--from=\S+\s+--chown=65532:65532\s+\S+/tmp/\s+/tmp/$`)
 	recursiveRe  = regexp.MustCompile(`\bchown\s+(-\S*R|--recursive)\b`)
 )
 
-// The default --out is /tmp/appsec-scanner/results.sarif: every image creates
+// The default --out is /tmp/cybedefend-scanner/results.sarif: every image creates
 // that directory for uid 65532, so that it runs without a mounted --out.
 func TestImagesGiveTheDefaultOutDirToTheScannerUser(t *testing.T) {
 	for _, path := range dockerfiles(t) {
@@ -244,15 +244,15 @@ func TestImagesGiveTheDefaultOutDirToTheScannerUser(t *testing.T) {
 			}
 		}
 		if !owned {
-			t.Errorf("%s: the final stage does not create /tmp/appsec-scanner owned by 65532:65532", path)
+			t.Errorf("%s: the final stage does not create /tmp/cybedefend-scanner owned by 65532:65532", path)
 		}
 	}
 }
 
 // minGoPatch is the oldest Go 1.26 patch release a build stage may use. The
-// appsec-scanner binary carries the toolchain's standard library: built with
+// cybedefend-scanner binary carries the toolchain's standard library: built with
 // golang:1.26.0, the images shipped every stdlib fix of 1.26.1 to 1.26.10,
-// and trivy-image reported 47 of them in usr/local/bin/appsec-scanner
+// and trivy-image reported 47 of them in usr/local/bin/cybedefend-scanner
 // (2026-11-03). Raise it with the golang digests when a patch release lands.
 const minGoPatch = 10
 
@@ -287,11 +287,11 @@ func TestBuildStagesUseAPatchedGo(t *testing.T) {
 
 // wantToolEnv is where every image points the tools' home and temporary
 // directory: under the default --out directory, the one place a hardened run
-// (--read-only --tmpfs /tmp/appsec-scanner) leaves writable. appsec-scanner
+// (--read-only --tmpfs /tmp/cybedefend-scanner) leaves writable. cybedefend-scanner
 // creates both before it starts the tool (runner.ensureToolDirs).
 var wantToolEnv = map[string]string{
-	"HOME":   "/tmp/appsec-scanner/home",
-	"TMPDIR": "/tmp/appsec-scanner/tmp",
+	"HOME":   "/tmp/cybedefend-scanner/home",
+	"TMPDIR": "/tmp/cybedefend-scanner/tmp",
 }
 
 // finalEnv reads the ENV instructions of the final stage, KEY=VALUE form.
@@ -330,7 +330,7 @@ func TestImagesPointHomeAndTmpdirUnderTheOutDir(t *testing.T) {
 			}
 		}
 		// A WORKDIR after USER is created owned by uid 65532: a writable
-		// directory outside /tmp/appsec-scanner.
+		// directory outside /tmp/cybedefend-scanner.
 		var userSeen bool
 		for _, in := range final {
 			switch in.keyword {
@@ -419,7 +419,7 @@ func TestGoVersionIsTheSameEverywhere(t *testing.T) {
 }
 
 // opengrepCache is where the image unpacks Opengrep's one-file binary at build
-// time. Unpacked at run time, it lands under HOME (/tmp/appsec-scanner/home):
+// time. Unpacked at run time, it lands under HOME (/tmp/cybedefend-scanner/home):
 // 244 MB per run, and a tmpfs mounted noexec (Docker's default) cannot run it.
 const opengrepCache = "/opt/cybedefend-scanners/opengrep-cache"
 
@@ -451,7 +451,7 @@ func TestOpengrepIsUnpackedAtBuildTime(t *testing.T) {
 	}
 }
 
-// A tool run directly (`--entrypoint opengrep`, no appsec-scanner to create
+// A tool run directly (`--entrypoint opengrep`, no cybedefend-scanner to create
 // them) still finds its HOME and TMPDIR: the image ships both, owned by uid
 // 65532, under the default --out directory.
 func TestImagesShipHomeAndTmpdir(t *testing.T) {
@@ -471,7 +471,7 @@ func TestImagesShipHomeAndTmpdir(t *testing.T) {
 		}
 		// zizmor's image runs no RUN: its build stage prepares the tree it copies.
 		for _, in := range ins[:lastFrom+1] {
-			if in.keyword == "RUN" && strings.Contains(in.args, "/out/tmp/appsec-scanner") {
+			if in.keyword == "RUN" && strings.Contains(in.args, "/out/tmp/cybedefend-scanner") {
 				text.WriteString(in.args + "\n")
 			}
 		}

@@ -11,7 +11,7 @@ WORKDIR /build
 COPY go.mod go.sum* ./
 COPY cmd ./cmd
 COPY internal ./internal
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/appsec-scanner ./cmd/appsec-scanner
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/cybedefend-scanner ./cmd/cybedefend-scanner
 
 # The Opengrep release binary, checked against the sha256 GitHub publishes
 # for each asset of https://github.com/opengrep/opengrep/releases/tag/v1.33.1
@@ -36,7 +36,7 @@ RUN set -eu; \
 # debian:bookworm-slim (multi-arch index)
 FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 COPY --from=opengrep /out-opengrep /usr/local/bin/opengrep
-COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
+COPY --from=build /out/cybedefend-scanner /usr/local/bin/cybedefend-scanner
 # What the image redistributes, each with its licence: our program, the Go
 # runtime compiled into it, and the tool (THIRD_PARTY_NOTICES.md).
 LABEL org.opencontainers.image.licenses="Apache-2.0 AND BSD-3-Clause AND LGPL-2.1-only"
@@ -47,19 +47,19 @@ COPY rules/opengrep /opt/cybedefend-scanners/rules/opengrep
 # The release binary is a one-file bundle that unpacks itself (244 MB) under
 # XDG_CACHE_HOME, then runs from there. Unpacked once here, root-owned and
 # read-only for uid 65532: a run writes none of it, and a noexec tmpfs at
-# /tmp/appsec-scanner (Docker's --tmpfs default) does not stop it.
+# /tmp/cybedefend-scanner (Docker's --tmpfs default) does not stop it.
 ENV XDG_CACHE_HOME=/opt/cybedefend-scanners/opengrep-cache
 RUN XDG_CACHE_HOME=/opt/cybedefend-scanners/opengrep-cache opengrep --version > /dev/null \
     && chmod -R a+rX,go-w /opt/cybedefend-scanners/opengrep-cache
-# The default --out (/tmp/appsec-scanner/results.sarif) is written by uid
+# The default --out (/tmp/cybedefend-scanner/results.sarif) is written by uid
 # 65532, with the tools' HOME and TMPDIR under it: those three empty
 # directories only are handed to it, nothing recursive.
-RUN mkdir -p /tmp/appsec-scanner/home /tmp/appsec-scanner/tmp && chown 65532:65532 /tmp/appsec-scanner /tmp/appsec-scanner/home /tmp/appsec-scanner/tmp
+RUN mkdir -p /tmp/cybedefend-scanner/home /tmp/cybedefend-scanner/tmp && chown 65532:65532 /tmp/cybedefend-scanner /tmp/cybedefend-scanner/home /tmp/cybedefend-scanner/tmp
 WORKDIR /src
 # Tools write their home and temporary files under the default --out
 # directory, the only place a hardened run (--read-only --tmpfs
-# /tmp/appsec-scanner) leaves writable. The image ships both; appsec-scanner
+# /tmp/cybedefend-scanner) leaves writable. The image ships both; cybedefend-scanner
 # creates them again when an empty tmpfs or emptyDir is mounted there.
-ENV HOME=/tmp/appsec-scanner/home TMPDIR=/tmp/appsec-scanner/tmp
+ENV HOME=/tmp/cybedefend-scanner/home TMPDIR=/tmp/cybedefend-scanner/tmp
 USER 65532:65532
-ENTRYPOINT ["/usr/local/bin/appsec-scanner", "run", "opengrep"]
+ENTRYPOINT ["/usr/local/bin/cybedefend-scanner", "run", "opengrep"]

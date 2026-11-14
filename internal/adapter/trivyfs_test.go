@@ -12,7 +12,7 @@ func TestTrivyFsCommand(t *testing.T) {
 	argv, onStdout := TrivyFs{}.Command("/src", "/tmp/o.sarif", map[string]string{})
 	want := []string{
 		"trivy", "fs", "--scanners", "vuln", "--format", "sarif", "--output", "/tmp/o.sarif",
-		"--exit-code", "0", "--cache-dir", "/tmp/appsec-scanner/trivy-cache",
+		"--exit-code", "0", "--cache-dir", "/tmp/cybedefend-scanner/trivy-cache",
 		"--skip-version-check", "--disable-telemetry", "--quiet", "/src",
 	}
 	if !reflect.DeepEqual(argv, want) {
@@ -82,7 +82,7 @@ func TestTrivyFsForwardsOnlyTrivyKeys(t *testing.T) {
 }
 
 func TestTrivyCacheDirIsOutsideTheSource(t *testing.T) {
-	if TrivyCacheDir != "/tmp/appsec-scanner/trivy-cache" {
+	if TrivyCacheDir != "/tmp/cybedefend-scanner/trivy-cache" {
 		t.Fatalf("TrivyCacheDir = %q", TrivyCacheDir)
 	}
 	if strings.HasPrefix(TrivyCacheDir, "/src") {
@@ -173,26 +173,26 @@ func TestTrivyFsKeepsEveryOtherFailure(t *testing.T) {
 // With an SBOM, trivy-fs scans once and converts that one report twice: Maven
 // Central, which limits requests per IP, is called by one scan only.
 func TestTrivyFsWithSBOMWritesTrivysJSONReportOnce(t *testing.T) {
-	a := TrivyFs{}.WithSBOM("/tmp/appsec-scanner/results.cdx.json")
-	argv, onStdout := a.Command("/src", "/tmp/appsec-scanner/results.sarif", map[string]string{})
+	a := TrivyFs{}.WithSBOM("/tmp/cybedefend-scanner/results.cdx.json")
+	argv, onStdout := a.Command("/src", "/tmp/cybedefend-scanner/results.sarif", map[string]string{})
 	want := []string{
 		"trivy", "fs", "--scanners", "vuln", "--format", "json", "--list-all-pkgs",
-		"--output", "/tmp/appsec-scanner/results.sarif.trivy.json",
-		"--exit-code", "0", "--cache-dir", "/tmp/appsec-scanner/trivy-cache",
+		"--output", "/tmp/cybedefend-scanner/results.sarif.trivy.json",
+		"--exit-code", "0", "--cache-dir", "/tmp/cybedefend-scanner/trivy-cache",
 		"--skip-version-check", "--disable-telemetry", "--quiet", "/src",
 	}
 	if !reflect.DeepEqual(argv, want) || onStdout {
 		t.Fatalf("argv = %q (stdout %v)\nwant   %q", argv, onStdout, want)
 	}
-	conv, ok := a.(ConvertingAdapter).Conversion("/tmp/appsec-scanner/results.sarif")
+	conv, ok := a.(ConvertingAdapter).Conversion("/tmp/cybedefend-scanner/results.sarif")
 	if !ok {
 		t.Fatal("no conversion with an SBOM")
 	}
 	wantConv := Conversion{
-		Report:   "/tmp/appsec-scanner/results.sarif.trivy.json",
-		SARIF:    []string{"trivy", "convert", "--format", "sarif", "--output", "/tmp/appsec-scanner/results.sarif", "--quiet", "/tmp/appsec-scanner/results.sarif.trivy.json"},
-		SBOM:     []string{"trivy", "convert", "--format", "cyclonedx", "--output", "/tmp/appsec-scanner/results.cdx.json", "--quiet", "/tmp/appsec-scanner/results.sarif.trivy.json"},
-		SBOMPath: "/tmp/appsec-scanner/results.cdx.json",
+		Report:   "/tmp/cybedefend-scanner/results.sarif.trivy.json",
+		SARIF:    []string{"trivy", "convert", "--format", "sarif", "--output", "/tmp/cybedefend-scanner/results.sarif", "--quiet", "/tmp/cybedefend-scanner/results.sarif.trivy.json"},
+		SBOM:     []string{"trivy", "convert", "--format", "cyclonedx", "--output", "/tmp/cybedefend-scanner/results.cdx.json", "--quiet", "/tmp/cybedefend-scanner/results.sarif.trivy.json"},
+		SBOMPath: "/tmp/cybedefend-scanner/results.cdx.json",
 	}
 	if !reflect.DeepEqual(conv, wantConv) {
 		t.Fatalf("conversion = %+v\nwant         %+v", conv, wantConv)
@@ -240,7 +240,7 @@ func TestTrivyFsOfflineFallbackKeepsTheSBOM(t *testing.T) {
 // a direct `trivy fs --format sarif` writes it.
 func TestTrivyFsRewritesROOTPATHToTheScannedSource(t *testing.T) {
 	l, err := sarif.Parse(strings.NewReader(`{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Trivy"}},` +
-		`"originalUriBaseIds":{"ROOTPATH":{"uri":"file:///tmp/appsec-scanner/results.sarif.trivy.json/"}},` +
+		`"originalUriBaseIds":{"ROOTPATH":{"uri":"file:///tmp/cybedefend-scanner/results.sarif.trivy.json/"}},` +
 		`"results":[{"ruleId":"CVE-1","message":{"text":"x"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"package-lock.json","uriBaseId":"ROOTPATH"}}}]}]}]}`))
 	if err != nil {
 		t.Fatal(err)

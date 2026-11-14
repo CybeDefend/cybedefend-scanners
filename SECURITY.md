@@ -6,7 +6,7 @@ Please report a vulnerability in this repository, in its container images or in 
 
 Include what you can of:
 
-- the affected component (the `appsec-scanner` program, an image and its tag, the action, the template);
+- the affected component (the `cybedefend-scanner` program, an image and its tag, the action, the template);
 - the steps to reproduce it, or a proof of concept;
 - the impact you expect.
 

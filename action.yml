@@ -227,14 +227,14 @@ runs:
         esac
         # The SARIF is written inside the container (uid 65532) and copied out
         # with docker cp, which gives the runner's user a file it can read.
-        args+=("ghcr.io/cybedefend/cybedefend-scanners/$SCANNER:$VERSION" --out "/tmp/appsec-scanner/$SARIF_OUTPUT")
+        args+=("ghcr.io/cybedefend/cybedefend-scanners/$SCANNER:$VERSION" --out "/tmp/cybedefend-scanner/$SARIF_OUTPUT")
         if [ "$UPLOAD" = true ]; then
           args+=(--upload)
         fi
 
         status=0
         docker "${args[@]}" || status=$?
-        if docker cp "$name:/tmp/appsec-scanner/$SARIF_OUTPUT" "$out_dir/$SARIF_OUTPUT" > /dev/null 2>&1; then
+        if docker cp "$name:/tmp/cybedefend-scanner/$SARIF_OUTPUT" "$out_dir/$SARIF_OUTPUT" > /dev/null 2>&1; then
           echo "sarif-file=$out_dir/$SARIF_OUTPUT" >> "$GITHUB_OUTPUT"
         fi
         exit "$status"

@@ -135,5 +135,5 @@ jobs:
           test "$(jq -r '[.[] | select(.Format != "sarif" or .ProjectID != "00000000-0000-4000-8000-000000000001" or .Branch == "")] | length' "$dump")" -eq 0
           test "$(jq -r '.[] | select(.Type == "container") | .Image' "$dump")" = "cybedefend-scanners-sample:test"
           test "$(jq -r '[.[] | select(.Type != "container") | select(.Image != "" or (.Fields | index("image")))] | length' "$dump")" -eq 0
-          test "$(jq -r '[.[] | select(.UserAgent | startswith("appsec-scanner/") | not)] | length' "$dump")" -eq 0
+          test "$(jq -r '[.[] | select(.UserAgent | startswith("cybedefend-scanner/") | not)] | length' "$dump")" -eq 0
           echo "six uploads: sast, secret, iac, cicd, sca and container, image on the container one only"

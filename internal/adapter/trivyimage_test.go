@@ -15,7 +15,7 @@ func TestTrivyImageCommandPullsTheReference(t *testing.T) {
 	argv, onStdout := a.Command("/src", "/tmp/o.sarif", map[string]string{})
 	want := []string{
 		"trivy", "image", "--scanners", "vuln", "--format", "sarif", "--output", "/tmp/o.sarif",
-		"--exit-code", "0", "--cache-dir", "/tmp/appsec-scanner/trivy-cache",
+		"--exit-code", "0", "--cache-dir", "/tmp/cybedefend-scanner/trivy-cache",
 		"--skip-version-check", "--disable-telemetry", "--quiet", "ghcr.io/acme/api:1.4.2",
 	}
 	if !reflect.DeepEqual(argv, want) {
@@ -36,7 +36,7 @@ func TestTrivyImageCommandReadsAnArchive(t *testing.T) {
 	argv, _ := a.Command("/src", "/tmp/o.sarif", map[string]string{})
 	want := []string{
 		"trivy", "image", "--scanners", "vuln", "--format", "sarif", "--output", "/tmp/o.sarif",
-		"--exit-code", "0", "--cache-dir", "/tmp/appsec-scanner/trivy-cache",
+		"--exit-code", "0", "--cache-dir", "/tmp/cybedefend-scanner/trivy-cache",
 		"--skip-version-check", "--disable-telemetry", "--quiet", "--input", "/out/image.tar",
 	}
 	if !reflect.DeepEqual(argv, want) {

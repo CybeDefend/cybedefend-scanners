@@ -1,12 +1,12 @@
-// Command appsec-scanner runs one open-source tool, normalises the SARIF it
+// Command cybedefend-scanner runs one open-source tool, normalises the SARIF it
 // produced and, with --upload, sends it to the import route of a CybeDefend
 // instance.
 //
-//	appsec-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout D]
+//	cybedefend-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout D]
 //	                   [--image REF] [--image-archive FILE]   (trivy-image only)
 //	                   [--sbom-out FILE]                      (trivy-fs only)
-//	appsec-scanner run <adapter> --scan-run [--source DIR] [--out FILE] [--timeout D]
-//	appsec-scanner version
+//	cybedefend-scanner run <adapter> --scan-run [--source DIR] [--out FILE] [--timeout D]
+//	cybedefend-scanner version
 //
 // --scan-run is the mode of a scanner pod of a CybeDefend Community cluster:
 // it fetches the archive of CYBEDEFEND_ARCHIVE_URL into --source, runs the
@@ -44,13 +44,13 @@ import (
 // version is set at build time: -ldflags "-X main.version=<version>".
 var version = "dev"
 
-// Exit codes of `appsec-scanner run`.
+// Exit codes of `cybedefend-scanner run`.
 const (
 	exitOK       = 0
 	exitTool     = 2
 	exitRefused  = 3
 	exitConfig   = 4
-	usageMessage = "usage: appsec-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout DURATION] [--image REF] [--image-archive FILE] [--sbom-out FILE]\n       appsec-scanner run <adapter> --scan-run [--source DIR] [--out FILE] [--timeout DURATION]\n       appsec-scanner version\n"
+	usageMessage = "usage: cybedefend-scanner run <adapter> [--source DIR] [--out FILE] [--upload] [--timeout DURATION] [--image REF] [--image-archive FILE] [--sbom-out FILE]\n       cybedefend-scanner run <adapter> --scan-run [--source DIR] [--out FILE] [--timeout DURATION]\n       cybedefend-scanner version\n"
 )
 
 // scanIDPattern is what a scan id printed to the terminal may look like.
@@ -67,7 +67,7 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	}
 	switch args[0] {
 	case "version", "--version":
-		fmt.Fprintf(stdout, "appsec-scanner %s\n", version)
+		fmt.Fprintf(stdout, "cybedefend-scanner %s\n", version)
 		return exitOK
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usageMessage)
@@ -77,13 +77,13 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		defer stop()
 		return runAdapter(ctx, args[1:], getenv, stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "appsec-scanner: unknown command %q\n%s", args[0], usageMessage)
+		fmt.Fprintf(stderr, "cybedefend-scanner: unknown command %q\n%s", args[0], usageMessage)
 		return exitConfig
 	}
 }
 
 func runAdapter(ctx context.Context, args []string, getenv func(string) string, stdout, stderr io.Writer) int {
-	logf := func(format string, a ...any) { fmt.Fprintf(stderr, "appsec-scanner: "+format+"\n", a...) }
+	logf := func(format string, a ...any) { fmt.Fprintf(stderr, "cybedefend-scanner: "+format+"\n", a...) }
 
 	cfg, err := config.Load(args, getenv)
 	if err != nil {
@@ -212,7 +212,7 @@ func runAdapter(ctx context.Context, args []string, getenv func(string) string, 
 	if !cfg.Upload {
 		return exitOK
 	}
-	client := &upload.Client{BaseURL: cfg.APIURL, Token: cfg.Token, UserAgent: "appsec-scanner/" + version}
+	client := &upload.Client{BaseURL: cfg.APIURL, Token: cfg.Token, UserAgent: "cybedefend-scanner/" + version}
 	logf("uploading %d bytes", buf.Len())
 	resp, err := client.Import(ctx, upload.Request{
 		ProjectID: cfg.ProjectID, Type: string(a.Type()), Branch: cfg.Branch, Image: cfg.Image, SARIF: buf.Bytes(),

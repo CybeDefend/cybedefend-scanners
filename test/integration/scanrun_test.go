@@ -60,8 +60,8 @@ func zipDir(t *testing.T, dir string) []byte {
 }
 
 // runScanRun runs the adapter's image as a scanner pod does: entrypoint
-// replaced by `appsec-scanner run <adapter> --scan-run`, a read-only root, and
-// empty tmpfs at /src and /tmp/appsec-scanner. The fake API serves the
+// replaced by `cybedefend-scanner run <adapter> --scan-run`, a read-only root, and
+// empty tmpfs at /src and /tmp/cybedefend-scanner. The fake API serves the
 // archive and the results route.
 func runScanRun(t *testing.T, adapter, sampleDir, network string) (*fakeapi.Server, string, string) {
 	t.Helper()
@@ -89,12 +89,12 @@ func runScanRunWith(t *testing.T, adapter, sampleDir, network string, setup func
 		"run", "--rm", "--network", network,
 		"--read-only",
 		"--tmpfs", "/src:uid=65532,gid=65532,mode=0755",
-		"--tmpfs", "/tmp/appsec-scanner:uid=65532,gid=65532,mode=0755",
+		"--tmpfs", "/tmp/cybedefend-scanner:uid=65532,gid=65532,mode=0755",
 		"-e", "CYBEDEFEND_API_URL=" + base + "/api",
 		"-e", "CYBEDEFEND_SCAN_ID=" + scanRunScanID,
 		"-e", "CYBEDEFEND_SCAN_TOKEN=" + scanRunToken,
 		"-e", "CYBEDEFEND_ARCHIVE_URL=" + archiveURL,
-		"--entrypoint", "/usr/local/bin/appsec-scanner",
+		"--entrypoint", "/usr/local/bin/cybedefend-scanner",
 		image, "run", adapter, "--scan-run",
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
@@ -228,7 +228,7 @@ func TestScanRun_TrivyFs(t *testing.T) {
 	if edges == 0 {
 		t.Errorf("the SBOM has no dependency graph:\n%s", u.SBOM)
 	}
-	for _, leak := range []string{"/src", "/tmp/appsec-scanner", archiveTop} {
+	for _, leak := range []string{"/src", "/tmp/cybedefend-scanner", archiveTop} {
 		if strings.Contains(string(u.SBOM), leak) {
 			t.Errorf("the SBOM names %q", leak)
 		}

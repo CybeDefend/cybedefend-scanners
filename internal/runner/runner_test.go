@@ -228,10 +228,10 @@ func TestRunForwardsDeclaredKeysOnly(t *testing.T) {
 	}
 }
 
-// An emptyDir or a tmpfs mounted at /tmp/appsec-scanner arrives empty: the
+// An emptyDir or a tmpfs mounted at /tmp/cybedefend-scanner arrives empty: the
 // HOME and TMPDIR the images point under it must exist before the tool runs.
 func TestRunCreatesHomeAndTmpdirBeforeTheTool(t *testing.T) {
-	base := filepath.Join(t.TempDir(), "appsec-scanner")
+	base := filepath.Join(t.TempDir(), "cybedefend-scanner")
 	home := filepath.Join(base, "home")
 	tmp := filepath.Join(base, "tmp")
 	dump := filepath.Join(t.TempDir(), "env.txt")

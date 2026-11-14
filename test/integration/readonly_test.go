@@ -11,14 +11,14 @@ import (
 	"testing"
 )
 
-// normalisedRe is the line appsec-scanner prints once the SARIF is checked.
+// normalisedRe is the line cybedefend-scanner prints once the SARIF is checked.
 var normalisedRe = regexp.MustCompile(`normalised: (\d+) results`)
 
 // TestImagesRunOnAReadOnlyRoot runs every image the hardened way a cluster
 // runs it: a read-only root filesystem and an empty tmpfs (mounted noexec,
-// Docker's default) at /tmp/appsec-scanner, the only place left writable.
+// Docker's default) at /tmp/cybedefend-scanner, the only place left writable.
 // Each tool must still find its sample's findings, so nothing it needs lives
-// outside that directory (HOME and TMPDIR point under it, and appsec-scanner
+// outside that directory (HOME and TMPDIR point under it, and cybedefend-scanner
 // creates both). The four tools that need no network run with none.
 func TestImagesRunOnAReadOnlyRoot(t *testing.T) {
 	requireDocker(t)
@@ -55,7 +55,7 @@ func TestImagesRunOnAReadOnlyRoot(t *testing.T) {
 			image := buildImage(t, tc.adapter)
 			args := []string{
 				"run", "--rm", "--network", tc.network,
-				"--read-only", "--tmpfs", "/tmp/appsec-scanner:uid=65532,gid=65532,mode=0755",
+				"--read-only", "--tmpfs", "/tmp/cybedefend-scanner:uid=65532,gid=65532,mode=0755",
 				"-v", tc.src(t) + ":/src:ro",
 			}
 			if tc.extra != nil {

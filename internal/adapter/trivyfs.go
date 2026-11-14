@@ -11,7 +11,7 @@ import (
 
 // TrivyCacheDir is where Trivy keeps the vulnerability database it downloads
 // at run time. The image creates it for uid 65532; it is never under /src.
-const TrivyCacheDir = "/tmp/appsec-scanner/trivy-cache"
+const TrivyCacheDir = "/tmp/cybedefend-scanner/trivy-cache"
 
 // TrivyFs runs `trivy fs` for vulnerabilities in dependency manifests and
 // lockfiles (import type sca).

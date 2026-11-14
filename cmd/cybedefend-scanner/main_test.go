@@ -22,7 +22,7 @@ const testToken = "cdp_test_secret_value_0123456789"
 var fakeTool string
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "appsec-scanner-test-")
+	dir, err := os.MkdirTemp("", "cybedefend-scanner-test-")
 	if err != nil {
 		panic(err)
 	}
@@ -127,7 +127,7 @@ func TestRunUploadsNormalisedSARIF(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d\nstdout: %s\nstderr: %s", code, stdout.String(), stderr.String())
 	}
-	if rec.userAgent != "appsec-scanner/"+version {
+	if rec.userAgent != "cybedefend-scanner/"+version {
 		t.Errorf("User-Agent = %q", rec.userAgent)
 	}
 	if rec.auth != "Bearer "+testToken {
@@ -290,11 +290,11 @@ func TestVersionPrintsTheBuildVersion(t *testing.T) {
 	if code := run([]string{"version"}, uploadEnv(""), &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	if strings.TrimSpace(stdout.String()) != "appsec-scanner dev" {
+	if strings.TrimSpace(stdout.String()) != "cybedefend-scanner dev" {
 		t.Fatalf("stdout = %q, want the default version dev", stdout.String())
 	}
 
-	bin := filepath.Join(t.TempDir(), "appsec-scanner")
+	bin := filepath.Join(t.TempDir(), "cybedefend-scanner")
 	build := exec.Command("go", "build", "-ldflags", "-X main.version=1.2.3", "-o", bin, ".")
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := build.CombinedOutput(); err != nil {
@@ -304,7 +304,7 @@ func TestVersionPrintsTheBuildVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("version: %v", err)
 	}
-	if strings.TrimSpace(string(got)) != "appsec-scanner 1.2.3" {
+	if strings.TrimSpace(string(got)) != "cybedefend-scanner 1.2.3" {
 		t.Fatalf("version = %q", got)
 	}
 }

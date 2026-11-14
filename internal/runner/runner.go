@@ -272,7 +272,7 @@ func execute(ctx context.Context, argv []string, env map[string]string, src stri
 }
 
 // toolDirKeys name the directories a tool writes besides its output: the
-// images point them under /tmp/appsec-scanner, where an emptyDir or a tmpfs
+// images point them under /tmp/cybedefend-scanner, where an emptyDir or a tmpfs
 // arrives empty on a read-only root filesystem.
 var toolDirKeys = []string{"HOME", "TMPDIR"}
 
