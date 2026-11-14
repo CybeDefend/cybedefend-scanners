@@ -34,7 +34,7 @@ RUN set -eu; \
 
 # Opengrep's release binary is linked against glibc.
 # debian:bookworm-slim (multi-arch index)
-FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3
+FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 COPY --from=opengrep /out-opengrep /usr/local/bin/opengrep
 COPY --from=build /out/appsec-scanner /usr/local/bin/appsec-scanner
 # What the image redistributes, each with its licence: our program, the Go
