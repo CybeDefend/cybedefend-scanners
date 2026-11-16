@@ -205,3 +205,76 @@ func TestThirdPartyNoticesNameTheShippedPins(t *testing.T) {
 		}
 	}
 }
+
+// TestDependabotLeavesTheSamplesVulnerable: the samples under testdata/samples
+// carry known vulnerabilities on purpose, and the integration tests expect
+// them. Dependabot security updates read every manifest of the repository, so
+// each sample manifest has an update entry that ignores all its dependencies:
+// otherwise Dependabot opens a pull request that fixes the sample and breaks
+// the test that scans it.
+func TestDependabotLeavesTheSamplesVulnerable(t *testing.T) {
+	var cfg struct {
+		Updates []struct {
+			Ecosystem   string   `yaml:"package-ecosystem"`
+			Directory   string   `yaml:"directory"`
+			Directories []string `yaml:"directories"`
+			Ignore      []struct {
+				Name        string   `yaml:"dependency-name"`
+				UpdateTypes []string `yaml:"update-types"`
+			} `yaml:"ignore"`
+		} `yaml:"updates"`
+	}
+	if err := yaml.Unmarshal(read(t, ".github/dependabot.yml"), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	ignoredAll := map[string]bool{}
+	for _, u := range cfg.Updates {
+		var all bool
+		for _, i := range u.Ignore {
+			all = all || (i.Name == "*" && len(i.UpdateTypes) == 0)
+		}
+		if !all {
+			continue
+		}
+		for _, d := range append([]string{u.Directory}, u.Directories...) {
+			if d != "" {
+				ignoredAll[u.Ecosystem+" "+strings.TrimSuffix(d, "/")] = true
+			}
+		}
+	}
+	// The manifests Dependabot security updates read, by ecosystem.
+	manifests := map[string]string{
+		"package.json": "npm", "package-lock.json": "npm", "yarn.lock": "npm", "pnpm-lock.yaml": "npm",
+		"requirements.txt": "pip", "Pipfile": "pip", "Pipfile.lock": "pip", "pyproject.toml": "pip", "poetry.lock": "pip",
+		"go.mod": "gomod", "pom.xml": "maven", "build.gradle": "gradle", "Gemfile": "bundler", "Gemfile.lock": "bundler",
+		"composer.json": "composer", "Cargo.toml": "cargo", "Cargo.lock": "cargo",
+	}
+	var found int
+	reported := map[string]bool{}
+	err := filepath.WalkDir(filepath.Join(root, "testdata", "samples"), func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		eco, ok := manifests[d.Name()]
+		if !ok {
+			return nil
+		}
+		found++
+		rel, err := filepath.Rel(root, filepath.Dir(p))
+		if err != nil {
+			return err
+		}
+		want := eco + " /" + filepath.ToSlash(rel)
+		if !ignoredAll[want] && !reported[want] {
+			reported[want] = true
+			t.Errorf("dependabot.yml has no %q entry ignoring every dependency (dependency-name \"*\"): it would fix the vulnerable sample in %s", want, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found == 0 {
+		t.Error("no manifest found under testdata/samples: the test reads the wrong place")
+	}
+}

@@ -35,3 +35,15 @@ updates:
       # Dockerfile together, by hand. Go patch releases still come.
       - dependency-name: golang
         update-types: ['version-update:semver-major', 'version-update:semver-minor']
+  # A deliberately vulnerable sample: the trivy-fs and trivy-image integration
+  # tests expect its known vulnerability. Ignoring every dependency stops both
+  # the version and the security update pull requests that would fix it.
+  - package-ecosystem: npm
+    directory: /testdata/samples/sca-npm
+    schedule:
+      interval: weekly
+    groups:
+      sample:
+        patterns: ['*']
+    ignore:
+      - dependency-name: '*'
